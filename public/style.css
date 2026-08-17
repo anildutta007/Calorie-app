@@ -72,7 +72,7 @@ nav {
   margin: 0 0 10px;
 }
 
-textarea, input[type="text"], input[type="date"], input[type="password"], input[type="number"] {
+textarea, input[type="text"], input[type="date"], input[type="password"], input[type="number"], select {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -564,4 +564,31 @@ input[type="file"] {
   color: var(--muted);
   text-align: center;
   display: none;
+}
+
+/* --- Target calculator --- */
+
+.target-calc-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.sex-btn {
+  flex: 1;
+  padding: 10px 8px;
+  border: 1px solid var(--border);
+  background: #fcfcfa;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.sex-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
 }

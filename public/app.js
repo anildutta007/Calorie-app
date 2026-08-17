@@ -160,12 +160,13 @@ function enterApp() {
   profileGate.style.display = "none";
   appMain.style.display = "block";
   currentProfileName.textContent = currentProfile.name;
-  loadTargets().then(loadToday);
+  Promise.all([loadBio(), loadTargets()]).then(loadToday);
 }
 
 switchProfileBtn.addEventListener("click", () => {
   localStorage.removeItem(PROFILE_KEY);
   currentProfile = null;
+  currentBio = null;
   currentTargets = null;
   showProfileList();
 });
@@ -429,6 +430,78 @@ const targetProteinInput = document.getElementById("target-protein");
 const targetCarbsInput = document.getElementById("target-carbs");
 const targetFatInput = document.getElementById("target-fat");
 
+// --- Target calculator (BMR/TDEE from age/sex/weight/height/activity) ---
+let currentBio = null; // {age, sex, weight_kg, height_cm, activity} | null - saved so it doesn't need re-entering
+let selectedSex = "male";
+const sexButtons = document.querySelectorAll(".sex-btn");
+const calcAgeInput = document.getElementById("calc-age");
+const calcWeightInput = document.getElementById("calc-weight");
+const calcHeightInput = document.getElementById("calc-height");
+const calcActivitySelect = document.getElementById("calc-activity");
+const calcTargetBtn = document.getElementById("calc-target-btn");
+const calcStatus = document.getElementById("calc-status");
+
+sexButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    sexButtons.forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    selectedSex = btn.dataset.sex;
+  });
+});
+
+async function loadBio() {
+  const res = await fetch("/api/profile/bio", { headers: profileHeaders() });
+  const data = await res.json();
+  currentBio = data.bio;
+}
+
+function applyBioToCalcForm() {
+  calcAgeInput.value = currentBio?.age ?? "";
+  calcWeightInput.value = currentBio?.weight_kg ?? "";
+  calcHeightInput.value = currentBio?.height_cm ?? "";
+  calcActivitySelect.value = currentBio?.activity || "light";
+  selectedSex = currentBio?.sex || "male";
+  sexButtons.forEach((b) => b.classList.toggle("active", b.dataset.sex === selectedSex));
+}
+
+calcTargetBtn.addEventListener("click", async () => {
+  calcStatus.textContent = "";
+  setBusy(calcTargetBtn, true, "Calculating...");
+  try {
+    const res = await fetch("/api/profile/targets/calculate", {
+      method: "POST",
+      headers: profileHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        age: calcAgeInput.value,
+        sex: selectedSex,
+        weight_kg: calcWeightInput.value,
+        height_cm: calcHeightInput.value,
+        activity: calcActivitySelect.value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to calculate.");
+    targetCaloriesInput.value = data.suggested.calories;
+    targetProteinInput.value = data.suggested.protein_g;
+    targetCarbsInput.value = data.suggested.carbs_g;
+    targetFatInput.value = data.suggested.fat_g;
+    // Keep in-memory bio in sync so reopening Edit later this session shows
+    // what was just entered, without needing a full page reload to refetch it.
+    currentBio = {
+      age: Number(calcAgeInput.value),
+      sex: selectedSex,
+      weight_kg: Number(calcWeightInput.value),
+      height_cm: Number(calcHeightInput.value),
+      activity: calcActivitySelect.value,
+    };
+    calcStatus.textContent = "Suggested target filled in below - review and Save Target to apply it.";
+  } catch (err) {
+    calcStatus.textContent = err.message;
+  } finally {
+    setBusy(calcTargetBtn, false, "📐 Calculate My Target");
+  }
+});
+
 async function loadTargets() {
   const res = await fetch("/api/profile/targets", { headers: profileHeaders() });
   const data = await res.json();
@@ -454,10 +527,12 @@ editTargetBtn.addEventListener("click", () => {
   targetDisplay.style.display = "none";
   targetForm.style.display = "block";
   targetFormError.style.display = "none";
+  calcStatus.textContent = "";
   targetCaloriesInput.value = currentTargets?.calories ?? "";
   targetProteinInput.value = currentTargets?.protein_g ?? "";
   targetCarbsInput.value = currentTargets?.carbs_g ?? "";
   targetFatInput.value = currentTargets?.fat_g ?? "";
+  applyBioToCalcForm();
 });
 
 cancelTargetBtn.addEventListener("click", renderTargetDisplay);

@@ -17,10 +17,13 @@ const {
   saveMealPlanRecipes,
   getProfileTargets,
   setProfileTargets,
+  getProfileBio,
+  setProfileBio,
 } = require("./db");
 const { analyzeMealText, analyzeMealPhoto } = require("./nutrition");
 const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mealplan");
 const { buildRecipePack } = require("./recipes");
+const { calculateTargets, ACTIVITY_MULTIPLIERS } = require("./nutritionCalc");
 const { flagPortion } = require("./portions");
 
 const app = express();
@@ -159,6 +162,52 @@ app.put("/api/profile/targets", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(err.status || 500).json({ error: err.message || "Failed to save target." });
+  }
+});
+
+app.get("/api/profile/bio", async (req, res) => {
+  try {
+    res.json({ bio: await getProfileBio(req.profileId) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to load details." });
+  }
+});
+
+// Calculates a suggested target from biometrics (Mifflin-St Jeor BMR/TDEE)
+// and saves the biometrics for next time. Does NOT save the target itself -
+// the frontend fills the target form with the suggestion so it can still be
+// reviewed/edited before the person hits Save Target.
+app.post("/api/profile/targets/calculate", async (req, res) => {
+  try {
+    const age = Number(req.body.age);
+    const weight_kg = Number(req.body.weight_kg);
+    const height_cm = Number(req.body.height_cm);
+    const sex = req.body.sex;
+    const activity = req.body.activity;
+
+    if (!Number.isFinite(age) || age < 2 || age > 120) {
+      return res.status(400).json({ error: "Enter a valid age (2-120)." });
+    }
+    if (sex !== "male" && sex !== "female") {
+      return res.status(400).json({ error: "Select a sex." });
+    }
+    if (!Number.isFinite(weight_kg) || weight_kg < 10 || weight_kg > 300) {
+      return res.status(400).json({ error: "Enter a valid weight in kg (10-300)." });
+    }
+    if (!Number.isFinite(height_cm) || height_cm < 50 || height_cm > 250) {
+      return res.status(400).json({ error: "Enter a valid height in cm (50-250)." });
+    }
+    if (!ACTIVITY_MULTIPLIERS[activity]) {
+      return res.status(400).json({ error: "Select an activity level." });
+    }
+
+    await setProfileBio(req.profileId, { age, sex, weight_kg, height_cm, activity });
+    const suggested = calculateTargets({ age, sex, weight_kg, height_cm, activity });
+    res.json({ suggested });
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message || "Failed to calculate target." });
   }
 });
 

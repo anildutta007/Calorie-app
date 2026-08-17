@@ -81,6 +81,14 @@ async function init() {
       await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS target_protein_g REAL`;
       await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS target_carbs_g REAL`;
       await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS target_fat_g REAL`;
+
+      // Biometrics used only to auto-calculate a suggested target (BMR/TDEE).
+      // Saved so a returning profile doesn't have to re-enter them every time.
+      await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio_age INTEGER`;
+      await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio_sex TEXT`; // 'male' | 'female'
+      await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio_weight_kg REAL`;
+      await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio_height_cm REAL`;
+      await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio_activity TEXT`; // sedentary|light|moderate|active|very_active
     })();
   }
   return initialized;
@@ -275,6 +283,39 @@ async function setProfileTargets(profileId, targets) {
   return formatTargets(rows[0]);
 }
 
+// --- Biometrics (used only to auto-calculate a suggested target) ---
+
+function formatBio(row) {
+  if (!row) return null;
+  return {
+    age: row.bio_age,
+    sex: row.bio_sex,
+    weight_kg: row.bio_weight_kg,
+    height_cm: row.bio_height_cm,
+    activity: row.bio_activity,
+  };
+}
+
+async function getProfileBio(profileId) {
+  await init();
+  const rows = await sql`
+    SELECT bio_age, bio_sex, bio_weight_kg, bio_height_cm, bio_activity FROM profiles WHERE id = ${profileId}
+  `;
+  return formatBio(rows[0]);
+}
+
+async function setProfileBio(profileId, bio) {
+  await init();
+  const rows = await sql`
+    UPDATE profiles
+    SET bio_age = ${bio.age}, bio_sex = ${bio.sex}, bio_weight_kg = ${bio.weight_kg},
+        bio_height_cm = ${bio.height_cm}, bio_activity = ${bio.activity}
+    WHERE id = ${profileId}
+    RETURNING bio_age, bio_sex, bio_weight_kg, bio_height_cm, bio_activity
+  `;
+  return formatBio(rows[0]);
+}
+
 module.exports = {
   insertMeal,
   getMeal,
@@ -289,4 +330,6 @@ module.exports = {
   saveMealPlanRecipes,
   getProfileTargets,
   setProfileTargets,
+  getProfileBio,
+  setProfileBio,
 };
