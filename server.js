@@ -16,7 +16,7 @@ const {
   getLatestMealPlan,
 } = require("./db");
 const { analyzeMealText, analyzeMealPhoto } = require("./nutrition");
-const { generateMealPlan } = require("./mealplan");
+const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mealplan");
 const { flagPortion } = require("./portions");
 
 const app = express();
@@ -201,8 +201,13 @@ app.post("/api/meal-plan", async (req, res) => {
       return res.status(400).json({ error: "Diet must be 'veg' or 'non-veg'." });
     }
 
-    const plan = await generateMealPlan(calorieTarget, proteinTarget, diet);
-    const mealPlan = await saveMealPlan(req.profileId, calorieTarget, proteinTarget, diet, plan);
+    const allowedProteins = diet === "veg" ? ALL_VEG_ADDONS : ALL_NONVEG_PROTEINS;
+    const includedProteins = Array.isArray(req.body.included_proteins)
+      ? req.body.included_proteins.filter((p) => allowedProteins.includes(p))
+      : [];
+
+    const plan = await generateMealPlan(calorieTarget, proteinTarget, diet, includedProteins);
+    const mealPlan = await saveMealPlan(req.profileId, calorieTarget, proteinTarget, diet, includedProteins, plan);
     res.json({ mealPlan });
   } catch (err) {
     console.error(err);

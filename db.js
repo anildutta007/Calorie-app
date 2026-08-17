@@ -65,10 +65,14 @@ async function init() {
           calorie_target REAL NOT NULL,
           protein_target REAL NOT NULL,
           diet TEXT NOT NULL,             -- 'veg' | 'non-veg'
+          included_proteins TEXT,         -- JSON array, e.g. '["chicken","fish","egg","mutton"]'
           plan_json TEXT NOT NULL,        -- {summary, days: [...]}
           created_at TEXT NOT NULL
         );
       `;
+
+      // Migration for deployments created before included_proteins existed.
+      await sql`ALTER TABLE meal_plans ADD COLUMN IF NOT EXISTS included_proteins TEXT`;
     })();
   }
   return initialized;
@@ -186,11 +190,11 @@ function formatRow(row) {
 
 // --- Meal plans (one saved 7-day plan per profile; regenerating replaces it) ---
 
-async function saveMealPlan(profileId, calorieTarget, proteinTarget, diet, plan) {
+async function saveMealPlan(profileId, calorieTarget, proteinTarget, diet, includedProteins, plan) {
   await init();
   const rows = await sql`
-    INSERT INTO meal_plans (profile_id, calorie_target, protein_target, diet, plan_json, created_at)
-    VALUES (${profileId}, ${calorieTarget}, ${proteinTarget}, ${diet}, ${JSON.stringify(plan)}, ${new Date().toISOString()})
+    INSERT INTO meal_plans (profile_id, calorie_target, protein_target, diet, included_proteins, plan_json, created_at)
+    VALUES (${profileId}, ${calorieTarget}, ${proteinTarget}, ${diet}, ${JSON.stringify(includedProteins || [])}, ${JSON.stringify(plan)}, ${new Date().toISOString()})
     RETURNING *
   `;
   return formatMealPlanRow(rows[0]);
@@ -211,6 +215,7 @@ function formatMealPlanRow(row) {
     calorie_target: row.calorie_target,
     protein_target: row.protein_target,
     diet: row.diet,
+    included_proteins: JSON.parse(row.included_proteins || "[]"),
     created_at: row.created_at,
     summary: plan.summary || null,
     days: plan.days || [],

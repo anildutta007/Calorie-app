@@ -111,6 +111,23 @@
           <button type="button" class="diet-btn active" data-diet="veg">🌱 Vegetarian</button>
           <button type="button" class="diet-btn" data-diet="non-veg">🍗 Non-Vegetarian</button>
         </div>
+
+        <div id="veg-options" class="protein-options">
+          <label class="muted" style="margin-bottom:6px">Also open to including:</label>
+          <label class="checkbox-row"><input type="checkbox" class="protein-check" value="egg" /> Egg</label>
+          <label class="checkbox-row"><input type="checkbox" class="protein-check" value="fish" /> Fish</label>
+        </div>
+
+        <div id="nonveg-options" class="protein-options" style="display:none">
+          <label class="muted" style="margin-bottom:6px">Which meats do you eat?</label>
+          <label class="checkbox-row"><input type="checkbox" class="protein-check" value="chicken" checked /> Chicken</label>
+          <label class="checkbox-row"><input type="checkbox" class="protein-check" value="fish" checked /> Fish</label>
+          <label class="checkbox-row"><input type="checkbox" class="protein-check" value="egg" checked /> Egg</label>
+          <label class="checkbox-row"><input type="checkbox" class="protein-check" value="mutton" checked /> Mutton</label>
+          <label class="checkbox-row"><input type="checkbox" class="protein-check" value="pork" /> Pork</label>
+          <label class="checkbox-row"><input type="checkbox" class="protein-check" value="beef" /> Beef</label>
+        </div>
+
         <button id="generate-plan-btn" class="primary-btn">Generate 7-Day Plan</button>
         <div id="plan-status" class="muted"></div>
       </div>

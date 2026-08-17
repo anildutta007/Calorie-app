@@ -465,18 +465,56 @@ async function loadHistory() {
 const planCaloriesInput = document.getElementById("plan-calories");
 const planProteinInput = document.getElementById("plan-protein");
 const dietButtons = document.querySelectorAll(".diet-btn");
+const vegOptions = document.getElementById("veg-options");
+const nonvegOptions = document.getElementById("nonveg-options");
 const generatePlanBtn = document.getElementById("generate-plan-btn");
 const planStatus = document.getElementById("plan-status");
 const planResult = document.getElementById("plan-result");
 let selectedDiet = "veg";
+
+function showDietOptions(diet) {
+  vegOptions.style.display = diet === "veg" ? "grid" : "none";
+  nonvegOptions.style.display = diet === "non-veg" ? "grid" : "none";
+}
+
+const VEG_DEFAULT_PROTEINS = []; // strict vegetarian by default
+const NONVEG_DEFAULT_PROTEINS = ["chicken", "fish", "egg", "mutton"]; // pork/beef opt-in
+
+function activePanel() {
+  return selectedDiet === "veg" ? vegOptions : nonvegOptions;
+}
+
+function getCheckedProteins() {
+  return Array.from(activePanel().querySelectorAll(".protein-check"))
+    .filter((cb) => cb.checked)
+    .map((cb) => cb.value);
+}
+
+// Scoped to one panel only — veg and non-veg panels share checkbox values
+// (egg, fish), so checking both from a single shared list would leak state
+// between them (e.g. a non-veg default including "fish" would also tick the
+// vegetarian panel's "fish" checkbox).
+function setPanelProteins(panel, list) {
+  const included = new Set(list || []);
+  panel.querySelectorAll(".protein-check").forEach((cb) => {
+    cb.checked = included.has(cb.value);
+  });
+}
+
+function resetProteinPanelsToDefaults() {
+  setPanelProteins(vegOptions, VEG_DEFAULT_PROTEINS);
+  setPanelProteins(nonvegOptions, NONVEG_DEFAULT_PROTEINS);
+}
 
 dietButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     dietButtons.forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     selectedDiet = btn.dataset.diet;
+    showDietOptions(selectedDiet);
   });
 });
+showDietOptions(selectedDiet);
 
 generatePlanBtn.addEventListener("click", async () => {
   const calories = Number(planCaloriesInput.value);
@@ -496,7 +534,7 @@ generatePlanBtn.addEventListener("click", async () => {
     const res = await fetch("/api/meal-plan", {
       method: "POST",
       headers: profileHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ calories, protein_g, diet: selectedDiet }),
+      body: JSON.stringify({ calories, protein_g, diet: selectedDiet, included_proteins: getCheckedProteins() }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to generate plan.");
@@ -523,6 +561,8 @@ function resetMealPlanUI() {
   planProteinInput.value = "";
   dietButtons.forEach((b) => b.classList.toggle("active", b.dataset.diet === "veg"));
   selectedDiet = "veg";
+  showDietOptions(selectedDiet);
+  resetProteinPanelsToDefaults();
   planStatus.textContent = "";
   planResult.innerHTML = `<div class="empty-state">No plan yet — set your targets above and generate one.</div>`;
 }
@@ -532,14 +572,19 @@ function applyMealPlan(mealPlan) {
   planProteinInput.value = mealPlan.protein_target;
   dietButtons.forEach((b) => b.classList.toggle("active", b.dataset.diet === mealPlan.diet));
   selectedDiet = mealPlan.diet;
+  showDietOptions(selectedDiet);
+  resetProteinPanelsToDefaults();
+  setPanelProteins(activePanel(), mealPlan.included_proteins);
   renderMealPlan(mealPlan);
 }
 
 function renderMealPlan(mealPlan) {
   const dietLabel = mealPlan.diet === "veg" ? "Vegetarian" : "Non-Vegetarian";
+  const proteins = mealPlan.included_proteins || [];
+  const proteinLabel = proteins.length ? ` (+ ${proteins.map(cap).join(", ")})` : mealPlan.diet === "veg" ? " (strict)" : "";
   planResult.innerHTML = `
     <div class="card">
-      <div class="muted">Target: ${Math.round(mealPlan.calorie_target)} kcal · ${Math.round(mealPlan.protein_target)}g protein · ${dietLabel}</div>
+      <div class="muted">Target: ${Math.round(mealPlan.calorie_target)} kcal · ${Math.round(mealPlan.protein_target)}g protein · ${dietLabel}${proteinLabel}</div>
       ${mealPlan.summary ? `<p style="margin-bottom:0">${escapeHtml(mealPlan.summary)}</p>` : ""}
     </div>
     ${mealPlan.days.map(renderPlanDay).join("")}

@@ -65,25 +65,49 @@ const MEAL_PLAN_TOOL = {
 };
 
 const SYSTEM_PROMPT = `You are a nutrition planning assistant specialized in Indian cuisine, embedded in a personal
-calorie tracking app. Given a daily calorie target, a daily protein target (grams), and a dietary preference, design
+calorie tracking app. Given a daily calorie target, a daily protein target (grams), and a dietary description, design
 a realistic, varied 7-day Indian meal plan (breakfast, lunch, dinner, and an optional snack) using authentic, common
 Indian dishes and realistic home-cook portion sizes.
 
-Vary the dishes across the week rather than repeating the same meals every day. For a vegetarian plan, use no meat,
-fish, or egg (dairy, paneer, and legumes are fine) - this follows the common Indian convention where "vegetarian"
-excludes eggs. For a non-vegetarian plan, include chicken, egg, fish, or mutton dishes on several days alongside
-vegetarian staples like dal, sabzi, and roti/rice.
+Vary the dishes across the week rather than repeating the same meals every day. Follow the dietary description
+exactly, including any explicit exclusions - never use an excluded ingredient even once across the 7 days, in any
+dish, garnish, or stock. Dairy, paneer, and legumes are always acceptable regardless of diet.
 
 Get each day's total calories and protein as close as possible to the targets (within roughly 10%), using standard
 nutrition knowledge (USDA / Indian food composition style values) for your estimates. Always call the
 generate_meal_plan tool with your answer. Be a reasonable, realistic estimator - don't refuse due to uncertainty.`;
 
-async function generateMealPlan(calorieTarget, proteinTarget, diet) {
+const ALL_NONVEG_PROTEINS = ["chicken", "fish", "egg", "mutton", "pork", "beef"];
+const ALL_VEG_ADDONS = ["egg", "fish"];
+
+function buildDietDescription(diet, includedProteins) {
+  const included = new Set(includedProteins || []);
+
+  if (diet === "veg") {
+    const addons = ALL_VEG_ADDONS.filter((p) => included.has(p));
+    if (addons.length === 0) {
+      return "strict vegetarian: no meat, fish, or egg anywhere in the plan";
+    }
+    return `vegetarian, but also open to including ${addons.join(" and ")} alongside standard vegetarian dishes. Do NOT include any other meat or fish.`;
+  }
+
+  // non-veg
+  const includedMeats = ALL_NONVEG_PROTEINS.filter((p) => included.has(p));
+  const excludedMeats = ALL_NONVEG_PROTEINS.filter((p) => !included.has(p));
+
+  let desc = includedMeats.length
+    ? `non-vegetarian; may include ${includedMeats.join(", ")} on various days alongside vegetarian dishes like dal, sabzi, and roti/rice`
+    : "no specific meats were approved, so treat this as vegetarian for protein sources (dal, paneer, legumes) despite the non-vegetarian category";
+
+  if (excludedMeats.length) {
+    desc += `. Do NOT include ${excludedMeats.join(", ")} anywhere in the plan under any circumstance.`;
+  }
+  return desc;
+}
+
+async function generateMealPlan(calorieTarget, proteinTarget, diet, includedProteins) {
   const anthropic = getClient();
-  const dietLabel =
-    diet === "veg"
-      ? "vegetarian (no meat, fish, or egg)"
-      : "non-vegetarian (include chicken, egg, fish, or mutton on several days alongside vegetarian dishes)";
+  const dietLabel = buildDietDescription(diet, includedProteins);
 
   const msg = await anthropic.messages.create({
     model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
@@ -101,4 +125,4 @@ async function generateMealPlan(calorieTarget, proteinTarget, diet) {
   return extractToolResult(msg, "generate_meal_plan");
 }
 
-module.exports = { generateMealPlan };
+module.exports = { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS };
