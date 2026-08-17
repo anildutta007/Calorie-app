@@ -288,12 +288,39 @@ photoInput.addEventListener("change", () => {
   analyzePhotoBtn.disabled = false;
 });
 
+// Phone camera photos are often 3-10MB (and sometimes HEIC on iPhone), which
+// can exceed the hosting platform's request-body size limit and fail with a
+// generic network error before the request even reaches the server - and
+// HEIC isn't a format Claude's vision API accepts anyway. Downscaling to a
+// JPEG client-side fixes both, and uploads faster besides.
+async function resizeImageForUpload(file, maxDim = 1600, quality = 0.85) {
+  if (file.size < 1.5 * 1024 * 1024) return file; // already small enough, don't bother
+  try {
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" }).catch(() => createImageBitmap(file));
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+    const width = Math.round(bitmap.width * scale);
+    const height = Math.round(bitmap.height * scale);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, width, height);
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    return blob || file;
+  } catch (e) {
+    return file; // if resizing fails for any reason, fall back to the original file
+  }
+}
+
 analyzePhotoBtn.addEventListener("click", async () => {
   if (!selectedFile) return;
-  setBusy(analyzePhotoBtn, true, "Analyzing...");
+  setBusy(analyzePhotoBtn, true, "Preparing photo...");
   try {
+    const uploadFile = await resizeImageForUpload(selectedFile);
+    setBusy(analyzePhotoBtn, true, "Analyzing...");
     const formData = new FormData();
-    formData.append("photo", selectedFile);
+    formData.append("photo", uploadFile, "photo.jpg");
     formData.append("caption", photoCaption.value.trim());
     const res = await fetch("/api/meals/photo", { method: "POST", headers: profileHeaders(), body: formData });
     const data = await res.json();
@@ -305,7 +332,7 @@ analyzePhotoBtn.addEventListener("click", async () => {
     selectedFile = null;
     analyzePhotoBtn.disabled = true;
   } catch (err) {
-    showError(err.message);
+    showError(err.message || "Upload failed - try a smaller photo or check your connection.");
   } finally {
     setBusy(analyzePhotoBtn, false, "Analyze & Log");
   }
