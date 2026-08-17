@@ -1,0 +1,227 @@
+:root {
+  --bg: #f7f6f2;
+  --card: #ffffff;
+  --ink: #1f2323;
+  --muted: #6b7280;
+  --accent: #2f6f4f;
+  --accent-dark: #204d37;
+  --warn: #b45309;
+  --warn-bg: #fff4e5;
+  --over: #b91c1c;
+  --over-bg: #fef2f2;
+  --border: #e6e3da;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.app {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 16px 16px 64px;
+}
+
+header h1 {
+  font-size: 1.4rem;
+  margin: 8px 0 12px;
+}
+
+nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tab-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.tab { display: none; }
+.tab.active { display: block; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.card h2 {
+  font-size: 1rem;
+  margin: 0 0 10px;
+}
+
+textarea, input[type="text"], input[type="date"] {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  margin-bottom: 10px;
+  background: #fcfcfa;
+}
+
+textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+input[type="file"] {
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+.voice-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.mic-btn {
+  border: none;
+  background: var(--accent);
+  color: white;
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.mic-btn.recording {
+  background: var(--over);
+  animation: pulse 1.2s infinite;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(185,28,28,0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(185,28,28,0); }
+  100% { box-shadow: 0 0 0 0 rgba(185,28,28,0); }
+}
+
+.muted { color: var(--muted); font-size: 0.85rem; }
+
+.primary-btn {
+  width: 100%;
+  border: none;
+  background: var(--accent-dark);
+  color: white;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.primary-btn:disabled {
+  background: #b9c2bd;
+  cursor: not-allowed;
+}
+
+.photo-preview {
+  width: 100%;
+  max-height: 260px;
+  object-fit: cover;
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+
+.result-card h3 { margin-top: 0; }
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.item-row:last-child { border-bottom: none; }
+
+.item-name { font-weight: 600; }
+.item-portion { color: var(--muted); font-size: 0.8rem; }
+.item-macros { text-align: right; color: var(--muted); font-size: 0.8rem; }
+
+.totals-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  text-align: center;
+}
+
+.totals-grid .stat-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.totals-grid .stat-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.flag {
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+}
+
+.flag.over { background: var(--over-bg); color: var(--over); }
+.flag.under { background: var(--warn-bg); color: var(--warn); }
+
+.meal-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.meal-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.meal-card-header h3 { margin: 0; font-size: 0.95rem; }
+.meal-time { font-size: 0.75rem; color: var(--muted); }
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: var(--over);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--muted);
+  padding: 24px 0;
+  font-size: 0.9rem;
+}
