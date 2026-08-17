@@ -471,6 +471,9 @@ const generatePlanBtn = document.getElementById("generate-plan-btn");
 const planStatus = document.getElementById("plan-status");
 const planResult = document.getElementById("plan-result");
 let selectedDiet = "veg";
+let currentMealPlan = null; // the plan object currently rendered, needed for PDF export
+let currentRecipes = null; // { [dishName]: {serves, prep_time_min, cook_time_min, ingredients, steps, image_url} } | null
+let planDishNames = []; // index-addressed list rebuilt on each render, so recipe-link buttons never need to embed dish names in HTML attributes
 
 function showDietOptions(diet) {
   vegOptions.style.display = diet === "veg" ? "grid" : "none";
@@ -563,6 +566,8 @@ function resetMealPlanUI() {
   selectedDiet = "veg";
   showDietOptions(selectedDiet);
   resetProteinPanelsToDefaults();
+  currentMealPlan = null;
+  currentRecipes = null;
   planStatus.textContent = "";
   planResult.innerHTML = `<div class="empty-state">No plan yet — set your targets above and generate one.</div>`;
 }
@@ -575,10 +580,13 @@ function applyMealPlan(mealPlan) {
   showDietOptions(selectedDiet);
   resetProteinPanelsToDefaults();
   setPanelProteins(activePanel(), mealPlan.included_proteins);
+  currentMealPlan = mealPlan;
+  currentRecipes = mealPlan.recipes || null; // reuse if the server already generated/cached them
   renderMealPlan(mealPlan);
 }
 
 function renderMealPlan(mealPlan) {
+  planDishNames = []; // rebuilt fresh so recipe-link data-idx stays in sync with this render
   const dietLabel = mealPlan.diet === "veg" ? "Vegetarian" : "Non-Vegetarian";
   const proteins = mealPlan.included_proteins || [];
   const proteinLabel = proteins.length ? ` (+ ${proteins.map(cap).join(", ")})` : mealPlan.diet === "veg" ? " (strict)" : "";
@@ -586,6 +594,8 @@ function renderMealPlan(mealPlan) {
     <div class="card">
       <div class="muted">Target: ${Math.round(mealPlan.calorie_target)} kcal · ${Math.round(mealPlan.protein_target)}g protein · ${dietLabel}${proteinLabel}</div>
       ${mealPlan.summary ? `<p style="margin-bottom:0">${escapeHtml(mealPlan.summary)}</p>` : ""}
+      <button id="download-pdf-btn" class="secondary-btn" type="button">📄 Download / Print PDF</button>
+      <div id="pdf-status" class="muted"></div>
     </div>
     ${mealPlan.days.map(renderPlanDay).join("")}
   `;
@@ -611,8 +621,174 @@ function renderPlanMeal(meal) {
   return `
     <div class="plan-meal">
       <div class="plan-meal-type">${cap(meal.meal_type)}</div>
-      ${renderItems(meal.items)}
+      ${renderPlanItems(meal.items)}
     </div>`;
+}
+
+// Like renderItems, but each dish name is a clickable "how to cook" link.
+// Names are looked up by index (planDishNames) rather than embedded in a
+// data-* attribute, so no HTML-attribute-escaping edge cases to worry about.
+function renderPlanItems(items) {
+  return items
+    .map((it) => {
+      const idx = planDishNames.length;
+      planDishNames.push(it.name);
+      return `
+    <div class="item-row">
+      <div>
+        <div class="item-name">
+          <button class="recipe-link" data-idx="${idx}" type="button">${escapeHtml(it.name)} <span class="recipe-icon">🍳</span></button>
+        </div>
+        <div class="item-portion">${escapeHtml(it.portion_desc)} · ~${Math.round(it.grams)}g</div>
+      </div>
+      <div class="item-macros">
+        ${Math.round(it.calories)} kcal<br/>
+        P${round1(it.protein_g)} C${round1(it.carbs_g)} F${round1(it.fat_g)}
+      </div>
+    </div>`;
+    })
+    .join("");
+}
+
+// Recipe-link clicks and the Download PDF button are both inside dynamically
+// rebuilt HTML, so a single delegated listener on the stable container
+// handles them instead of re-binding after every render.
+planResult.addEventListener("click", (e) => {
+  const recipeBtn = e.target.closest(".recipe-link");
+  if (recipeBtn) {
+    openRecipeModal(planDishNames[Number(recipeBtn.dataset.idx)]);
+    return;
+  }
+  const pdfBtn = e.target.closest("#download-pdf-btn");
+  if (pdfBtn) downloadPlanPdf(pdfBtn);
+});
+
+// --- Recipe modal ---
+const recipeModal = document.getElementById("recipe-modal");
+const recipeModalBody = document.getElementById("recipe-modal-body");
+
+document.getElementById("recipe-modal-close").addEventListener("click", () => {
+  recipeModal.style.display = "none";
+});
+recipeModal.addEventListener("click", (e) => {
+  if (e.target === recipeModal) recipeModal.style.display = "none";
+});
+
+async function ensureRecipesLoaded() {
+  if (currentRecipes) return currentRecipes;
+  const res = await fetch("/api/meal-plan/recipes", {
+    method: "POST",
+    headers: profileHeaders({ "Content-Type": "application/json" }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to load recipes.");
+  currentRecipes = data.recipes;
+  return currentRecipes;
+}
+
+async function openRecipeModal(dishName) {
+  recipeModal.style.display = "flex";
+  recipeModalBody.innerHTML = `<h2>${escapeHtml(dishName)}</h2><div class="muted">Loading recipe... (first time for a plan can take ~30-60s since every dish is fetched at once)</div>`;
+  try {
+    const recipes = await ensureRecipesLoaded();
+    renderRecipeModalBody(dishName, recipes[dishName]);
+  } catch (err) {
+    recipeModalBody.innerHTML = `<h2>${escapeHtml(dishName)}</h2><div class="flag over">⚠️ ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderRecipeModalBody(dishName, recipe) {
+  if (!recipe || !recipe.available) {
+    recipeModalBody.innerHTML = `<h2>${escapeHtml(dishName)}</h2><div class="empty-state">Recipe not available for this dish.</div>`;
+    return;
+  }
+  recipeModalBody.innerHTML = `<h2>${escapeHtml(dishName)}</h2>${recipeContentHtml(recipe)}`;
+}
+
+function recipeContentHtml(recipe) {
+  const imageHtml = recipe.image_url
+    ? `<img src="${escapeHtml(recipe.image_url)}" class="recipe-photo" alt="" />`
+    : `<div class="recipe-photo-fallback">🍽️</div>`;
+  const metaBits = [];
+  if (recipe.serves) metaBits.push(`Serves ${recipe.serves}`);
+  if (recipe.prep_time_min) metaBits.push(`Prep ${recipe.prep_time_min} min`);
+  if (recipe.cook_time_min) metaBits.push(`Cook ${recipe.cook_time_min} min`);
+
+  return `
+    ${imageHtml}
+    ${metaBits.length ? `<div class="muted" style="margin-bottom:12px">${metaBits.join(" · ")}</div>` : ""}
+    <h3>Ingredients</h3>
+    <ul class="recipe-list">${recipe.ingredients.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>
+    <h3>Steps</h3>
+    <ol class="recipe-list">${recipe.steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>
+  `;
+}
+
+// --- PDF export (browser print-to-PDF on a dedicated print-only view) ---
+async function downloadPlanPdf(btn) {
+  const statusEl = document.getElementById("pdf-status");
+  setBusy(btn, true, "Preparing...");
+  if (statusEl) statusEl.textContent = "Loading recipes for every dish (first time only, can take ~30-60s)...";
+  try {
+    const recipes = await ensureRecipesLoaded();
+    buildPrintView(currentMealPlan, recipes);
+    if (statusEl) statusEl.textContent = "";
+    window.print();
+  } catch (err) {
+    if (statusEl) statusEl.textContent = err.message;
+  } finally {
+    setBusy(btn, false, "📄 Download / Print PDF");
+  }
+}
+
+function buildPrintView(mealPlan, recipes) {
+  const dietLabel = mealPlan.diet === "veg" ? "Vegetarian" : "Non-Vegetarian";
+  const proteins = mealPlan.included_proteins || [];
+  const proteinLabel = proteins.length ? ` (+ ${proteins.map(cap).join(", ")})` : mealPlan.diet === "veg" ? " (strict)" : "";
+
+  const daysHtml = mealPlan.days
+    .map(
+      (day) => `
+    <div class="print-day">
+      <h2>${escapeHtml(day.day_label || `Day ${day.day_number}`)}</h2>
+      ${day.meals
+        .map(
+          (meal) => `
+        <h3>${escapeHtml(cap(meal.meal_type))}</h3>
+        ${meal.items.map((it) => renderPrintItem(it, recipes[it.name])).join("")}
+      `
+        )
+        .join("")}
+      <div class="print-day-totals">
+        Day total: ${Math.round(day.day_totals.calories)} kcal · ${round1(day.day_totals.protein_g)}g protein · ${round1(day.day_totals.carbs_g)}g carbs · ${round1(day.day_totals.fat_g)}g fat
+      </div>
+    </div>`
+    )
+    .join("");
+
+  document.getElementById("print-view").innerHTML = `
+    <h1>🍽️ 7-Day Indian Meal Plan</h1>
+    <div class="print-meta">Target: ${Math.round(mealPlan.calorie_target)} kcal · ${Math.round(mealPlan.protein_target)}g protein/day · ${dietLabel}${proteinLabel}</div>
+    ${mealPlan.summary ? `<p>${escapeHtml(mealPlan.summary)}</p>` : ""}
+    ${daysHtml}
+  `;
+}
+
+function renderPrintItem(item, recipe) {
+  const imageHtml = recipe && recipe.image_url ? `<img src="${escapeHtml(recipe.image_url)}" class="print-recipe-photo" />` : "";
+  const ingredientsHtml =
+    recipe && recipe.ingredients.length ? `<ul>${recipe.ingredients.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>` : "";
+  const stepsHtml = recipe && recipe.steps.length ? `<ol>${recipe.steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>` : "";
+  return `
+    <div class="print-item">
+      <div class="print-item-header">
+        ${imageHtml}
+        <div><strong>${escapeHtml(item.name)}</strong> — ${escapeHtml(item.portion_desc)} · ${Math.round(item.calories)} kcal</div>
+      </div>
+      ${ingredientsHtml}
+      ${stepsHtml}
+    </div>
+  `;
 }
 
 // Init

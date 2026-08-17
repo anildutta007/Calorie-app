@@ -14,9 +14,11 @@ const {
   verifyProfilePin,
   saveMealPlan,
   getLatestMealPlan,
+  saveMealPlanRecipes,
 } = require("./db");
 const { analyzeMealText, analyzeMealPhoto } = require("./nutrition");
 const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mealplan");
+const { buildRecipePack } = require("./recipes");
 const { flagPortion } = require("./portions");
 
 const app = express();
@@ -222,6 +224,27 @@ app.get("/api/meal-plan", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || "Failed to load meal plan." });
+  }
+});
+
+// Generates (or returns cached) cooking instructions + best-effort photos for
+// every dish in the profile's current meal plan.
+app.post("/api/meal-plan/recipes", async (req, res) => {
+  try {
+    const mealPlan = await getLatestMealPlan(req.profileId);
+    if (!mealPlan) return res.status(404).json({ error: "No meal plan found. Generate one first." });
+
+    if (mealPlan.recipes) {
+      return res.json({ recipes: mealPlan.recipes });
+    }
+
+    const dishNames = mealPlan.days.flatMap((day) => day.meals.flatMap((meal) => meal.items.map((item) => item.name)));
+    const recipes = await buildRecipePack(dishNames);
+    await saveMealPlanRecipes(mealPlan.id, req.profileId, recipes);
+    res.json({ recipes });
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message || "Failed to generate recipes." });
   }
 });
 

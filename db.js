@@ -67,12 +67,14 @@ async function init() {
           diet TEXT NOT NULL,             -- 'veg' | 'non-veg'
           included_proteins TEXT,         -- JSON array, e.g. '["chicken","fish","egg","mutton"]'
           plan_json TEXT NOT NULL,        -- {summary, days: [...]}
+          recipes_json TEXT,              -- {[dishName]: {serves, prep_time_min, cook_time_min, ingredients, steps, image_url}}, generated lazily
           created_at TEXT NOT NULL
         );
       `;
 
-      // Migration for deployments created before included_proteins existed.
+      // Migration for deployments created before included_proteins/recipes_json existed.
       await sql`ALTER TABLE meal_plans ADD COLUMN IF NOT EXISTS included_proteins TEXT`;
+      await sql`ALTER TABLE meal_plans ADD COLUMN IF NOT EXISTS recipes_json TEXT`;
     })();
   }
   return initialized;
@@ -208,6 +210,18 @@ async function getLatestMealPlan(profileId) {
   return rows[0] ? formatMealPlanRow(rows[0]) : null;
 }
 
+// Saves the generated recipe pack onto a plan so it isn't regenerated on
+// every visit; scoped to profileId so one profile can't write another's plan.
+async function saveMealPlanRecipes(mealPlanId, profileId, recipes) {
+  await init();
+  const rows = await sql`
+    UPDATE meal_plans SET recipes_json = ${JSON.stringify(recipes)}
+    WHERE id = ${mealPlanId} AND profile_id = ${profileId}
+    RETURNING *
+  `;
+  return rows[0] ? formatMealPlanRow(rows[0]) : null;
+}
+
 function formatMealPlanRow(row) {
   const plan = JSON.parse(row.plan_json || "{}");
   return {
@@ -219,6 +233,7 @@ function formatMealPlanRow(row) {
     created_at: row.created_at,
     summary: plan.summary || null,
     days: plan.days || [],
+    recipes: row.recipes_json ? JSON.parse(row.recipes_json) : null,
   };
 }
 
@@ -233,4 +248,5 @@ module.exports = {
   verifyProfilePin,
   saveMealPlan,
   getLatestMealPlan,
+  saveMealPlanRecipes,
 };
