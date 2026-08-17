@@ -12,8 +12,11 @@ const {
   createProfile,
   listProfiles,
   verifyProfilePin,
+  saveMealPlan,
+  getLatestMealPlan,
 } = require("./db");
 const { analyzeMealText, analyzeMealPhoto } = require("./nutrition");
+const { generateMealPlan } = require("./mealplan");
 const { flagPortion } = require("./portions");
 
 const app = express();
@@ -38,6 +41,7 @@ function requireProfile(req, res, next) {
 }
 app.use("/api/meals", requireProfile);
 app.use("/api/dates", requireProfile);
+app.use("/api/meal-plan", requireProfile);
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD (server local/UTC date)
@@ -176,6 +180,43 @@ app.delete("/api/meals/:id", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || "Failed to delete meal." });
+  }
+});
+
+// --- Meal plan routes (require X-Profile-Id) ---
+
+app.post("/api/meal-plan", async (req, res) => {
+  try {
+    const calorieTarget = Number(req.body.calories);
+    const proteinTarget = Number(req.body.protein_g);
+    const diet = req.body.diet;
+
+    if (!Number.isFinite(calorieTarget) || calorieTarget < 800 || calorieTarget > 6000) {
+      return res.status(400).json({ error: "Enter a calorie target between 800 and 6000." });
+    }
+    if (!Number.isFinite(proteinTarget) || proteinTarget < 10 || proteinTarget > 400) {
+      return res.status(400).json({ error: "Enter a protein target between 10 and 400 grams." });
+    }
+    if (diet !== "veg" && diet !== "non-veg") {
+      return res.status(400).json({ error: "Diet must be 'veg' or 'non-veg'." });
+    }
+
+    const plan = await generateMealPlan(calorieTarget, proteinTarget, diet);
+    const mealPlan = await saveMealPlan(req.profileId, calorieTarget, proteinTarget, diet, plan);
+    res.json({ mealPlan });
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message || "Failed to generate meal plan." });
+  }
+});
+
+app.get("/api/meal-plan", async (req, res) => {
+  try {
+    const mealPlan = await getLatestMealPlan(req.profileId);
+    res.json({ mealPlan });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to load meal plan." });
   }
 });
 

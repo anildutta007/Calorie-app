@@ -57,6 +57,18 @@ async function init() {
         const legacy = await rawCreateProfile("Legacy", "0000");
         await sql`UPDATE meals SET profile_id = ${legacy.id} WHERE profile_id IS NULL`;
       }
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS meal_plans (
+          id SERIAL PRIMARY KEY,
+          profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+          calorie_target REAL NOT NULL,
+          protein_target REAL NOT NULL,
+          diet TEXT NOT NULL,             -- 'veg' | 'non-veg'
+          plan_json TEXT NOT NULL,        -- {summary, days: [...]}
+          created_at TEXT NOT NULL
+        );
+      `;
     })();
   }
   return initialized;
@@ -172,6 +184,39 @@ function formatRow(row) {
   };
 }
 
+// --- Meal plans (one saved 7-day plan per profile; regenerating replaces it) ---
+
+async function saveMealPlan(profileId, calorieTarget, proteinTarget, diet, plan) {
+  await init();
+  const rows = await sql`
+    INSERT INTO meal_plans (profile_id, calorie_target, protein_target, diet, plan_json, created_at)
+    VALUES (${profileId}, ${calorieTarget}, ${proteinTarget}, ${diet}, ${JSON.stringify(plan)}, ${new Date().toISOString()})
+    RETURNING *
+  `;
+  return formatMealPlanRow(rows[0]);
+}
+
+async function getLatestMealPlan(profileId) {
+  await init();
+  const rows = await sql`
+    SELECT * FROM meal_plans WHERE profile_id = ${profileId} ORDER BY created_at DESC LIMIT 1
+  `;
+  return rows[0] ? formatMealPlanRow(rows[0]) : null;
+}
+
+function formatMealPlanRow(row) {
+  const plan = JSON.parse(row.plan_json || "{}");
+  return {
+    id: row.id,
+    calorie_target: row.calorie_target,
+    protein_target: row.protein_target,
+    diet: row.diet,
+    created_at: row.created_at,
+    summary: plan.summary || null,
+    days: plan.days || [],
+  };
+}
+
 module.exports = {
   insertMeal,
   getMeal,
@@ -181,4 +226,6 @@ module.exports = {
   createProfile,
   listProfiles,
   verifyProfilePin,
+  saveMealPlan,
+  getLatestMealPlan,
 };

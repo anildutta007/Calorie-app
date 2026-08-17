@@ -72,7 +72,7 @@ nav {
   margin: 0 0 10px;
 }
 
-textarea, input[type="text"], input[type="date"], input[type="password"] {
+textarea, input[type="text"], input[type="date"], input[type="password"], input[type="number"] {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -81,6 +81,13 @@ textarea, input[type="text"], input[type="date"], input[type="password"] {
   font-family: inherit;
   margin-bottom: 10px;
   background: #fcfcfa;
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 4px;
 }
 
 textarea {
@@ -298,4 +305,49 @@ input[type="file"] {
   border-radius: 999px;
   font-size: 0.8rem;
   font-weight: 600;
+}
+
+/* --- Meal plan --- */
+
+.diet-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.diet-btn {
+  flex: 1;
+  padding: 10px 8px;
+  border: 1px solid var(--border);
+  background: #fcfcfa;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.diet-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.plan-day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.plan-day-header h3 { margin: 0; }
+
+.plan-meal { margin-bottom: 10px; }
+
+.plan-meal-type {
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--accent-dark);
+  margin-bottom: 4px;
 }

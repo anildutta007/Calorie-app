@@ -180,6 +180,7 @@ tabButtons.forEach((btn) => {
     document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
     if (btn.dataset.tab === "today") loadToday();
     if (btn.dataset.tab === "history") loadHistory();
+    if (btn.dataset.tab === "plan") loadMealPlan();
   });
 });
 
@@ -458,6 +459,115 @@ async function loadHistory() {
   const data = await res.json();
   renderTotals(document.getElementById("history-totals"), data.total);
   renderMealList(document.getElementById("history-list"), data.meals);
+}
+
+// --- Meal Plan tab ---
+const planCaloriesInput = document.getElementById("plan-calories");
+const planProteinInput = document.getElementById("plan-protein");
+const dietButtons = document.querySelectorAll(".diet-btn");
+const generatePlanBtn = document.getElementById("generate-plan-btn");
+const planStatus = document.getElementById("plan-status");
+const planResult = document.getElementById("plan-result");
+let selectedDiet = "veg";
+
+dietButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    dietButtons.forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    selectedDiet = btn.dataset.diet;
+  });
+});
+
+generatePlanBtn.addEventListener("click", async () => {
+  const calories = Number(planCaloriesInput.value);
+  const protein_g = Number(planProteinInput.value);
+  planStatus.textContent = "";
+  if (!calories || calories < 800 || calories > 6000) {
+    planStatus.textContent = "Enter a calorie target between 800 and 6000.";
+    return;
+  }
+  if (!protein_g || protein_g < 10 || protein_g > 400) {
+    planStatus.textContent = "Enter a protein target between 10 and 400 grams.";
+    return;
+  }
+
+  setBusy(generatePlanBtn, true, "Generating... (can take ~30-60s)");
+  try {
+    const res = await fetch("/api/meal-plan", {
+      method: "POST",
+      headers: profileHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ calories, protein_g, diet: selectedDiet }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to generate plan.");
+    applyMealPlan(data.mealPlan);
+  } catch (err) {
+    planStatus.textContent = err.message;
+  } finally {
+    setBusy(generatePlanBtn, false, "Generate 7-Day Plan");
+  }
+});
+
+async function loadMealPlan() {
+  const res = await fetch("/api/meal-plan", { headers: profileHeaders() });
+  const data = await res.json();
+  if (data.mealPlan) {
+    applyMealPlan(data.mealPlan);
+  } else {
+    resetMealPlanUI();
+  }
+}
+
+function resetMealPlanUI() {
+  planCaloriesInput.value = "";
+  planProteinInput.value = "";
+  dietButtons.forEach((b) => b.classList.toggle("active", b.dataset.diet === "veg"));
+  selectedDiet = "veg";
+  planStatus.textContent = "";
+  planResult.innerHTML = `<div class="empty-state">No plan yet — set your targets above and generate one.</div>`;
+}
+
+function applyMealPlan(mealPlan) {
+  planCaloriesInput.value = mealPlan.calorie_target;
+  planProteinInput.value = mealPlan.protein_target;
+  dietButtons.forEach((b) => b.classList.toggle("active", b.dataset.diet === mealPlan.diet));
+  selectedDiet = mealPlan.diet;
+  renderMealPlan(mealPlan);
+}
+
+function renderMealPlan(mealPlan) {
+  const dietLabel = mealPlan.diet === "veg" ? "Vegetarian" : "Non-Vegetarian";
+  planResult.innerHTML = `
+    <div class="card">
+      <div class="muted">Target: ${Math.round(mealPlan.calorie_target)} kcal · ${Math.round(mealPlan.protein_target)}g protein · ${dietLabel}</div>
+      ${mealPlan.summary ? `<p style="margin-bottom:0">${escapeHtml(mealPlan.summary)}</p>` : ""}
+    </div>
+    ${mealPlan.days.map(renderPlanDay).join("")}
+  `;
+}
+
+function renderPlanDay(day) {
+  return `
+    <div class="card">
+      <div class="plan-day-header">
+        <h3>${escapeHtml(day.day_label || `Day ${day.day_number}`)}</h3>
+      </div>
+      ${day.meals.map(renderPlanMeal).join("")}
+      <div class="totals-grid" style="margin-top:8px">
+        ${statBlock(Math.round(day.day_totals.calories), "kcal")}
+        ${statBlock(round1(day.day_totals.protein_g), "protein g")}
+        ${statBlock(round1(day.day_totals.carbs_g), "carbs g")}
+        ${statBlock(round1(day.day_totals.fat_g), "fat g")}
+      </div>
+    </div>`;
+}
+
+function renderPlanMeal(meal) {
+  return `
+    <div class="plan-meal">
+      <div class="plan-meal-type">${cap(meal.meal_type)}</div>
+      ${renderItems(meal.items)}
+    </div>`;
 }
 
 // Init

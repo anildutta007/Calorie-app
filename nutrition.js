@@ -71,7 +71,7 @@ async function analyzeMealText(text) {
       },
     ],
   });
-  return extractToolResult(msg);
+  return extractNutritionResult(msg);
 }
 
 async function analyzeMealPhoto(base64Image, mediaType, captionText) {
@@ -96,15 +96,19 @@ async function analyzeMealPhoto(base64Image, mediaType, captionText) {
       },
     ],
   });
-  return extractToolResult(msg);
+  return extractNutritionResult(msg);
 }
 
-function extractToolResult(msg) {
-  const toolUse = msg.content.find((b) => b.type === "tool_use" && b.name === "log_nutrition");
+function extractToolResult(msg, toolName) {
+  const toolUse = msg.content.find((b) => b.type === "tool_use" && b.name === toolName);
   if (!toolUse) {
-    throw new Error("Model did not return a structured nutrition estimate. Try again.");
+    throw new Error("Model did not return a structured result. Try again.");
   }
   return toolUse.input;
 }
 
-module.exports = { analyzeMealText, analyzeMealPhoto };
+function extractNutritionResult(msg) {
+  return extractToolResult(msg, "log_nutrition");
+}
+
+module.exports = { analyzeMealText, analyzeMealPhoto, getClient, extractToolResult };
