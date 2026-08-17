@@ -3,14 +3,21 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-<title>Calorie Tracker</title>
+<title>Dutta Food Planner and Calorie Counter</title>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <!-- PROFILE GATE -->
   <div id="profile-gate" class="profile-gate">
     <div class="profile-gate-card">
-      <h1>🍽️ Calorie Tracker</h1>
+      <div class="app-logo">
+        <div class="app-logo-icon">🥗</div>
+        <div class="app-logo-text">
+          <div class="app-logo-name">Dutta Food Planner</div>
+          <div class="app-logo-sub">and Calorie Counter</div>
+        </div>
+      </div>
+      <div class="food-banner" aria-hidden="true">🍎 🥦 🍊 🥕 🍇</div>
 
       <div id="profile-list-step">
         <div id="profile-list" class="profile-list"></div>
@@ -39,17 +46,23 @@
 
   <div id="app-main" class="app">
     <header>
-      <h1>🍽️ Calorie Tracker</h1>
+      <div class="app-logo">
+        <div class="app-logo-icon">🥗</div>
+        <div class="app-logo-text">
+          <div class="app-logo-name">Dutta Food Planner</div>
+          <div class="app-logo-sub">and Calorie Counter</div>
+        </div>
+      </div>
       <div class="profile-bar">
         <span id="current-profile-name" class="profile-pill"></span>
         <button id="switch-profile-btn" class="link-btn">Switch profile</button>
       </div>
       <nav>
-        <button class="tab-btn active" data-tab="log">Log Meal</button>
-        <button class="tab-btn" data-tab="today">Today</button>
-        <button class="tab-btn" data-tab="history">History</button>
-        <button class="tab-btn" data-tab="plan">Meal Plan</button>
-        <button class="tab-btn" data-tab="target">Target</button>
+        <button class="tab-btn active" data-tab="log">📝 Log Meal</button>
+        <button class="tab-btn" data-tab="today">📅 Today</button>
+        <button class="tab-btn" data-tab="history">📊 History</button>
+        <button class="tab-btn" data-tab="plan">🥗 Meal Plan</button>
+        <button class="tab-btn" data-tab="target">🎯 Target</button>
       </nav>
     </header>
 
@@ -104,8 +117,18 @@
     <!-- MEAL PLAN TAB -->
     <section id="tab-plan" class="tab">
       <div class="card">
-        <h2>Build a 7-day Indian meal plan</h2>
+        <h2>Build your Indian meal plan</h2>
         <div id="plan-target-hint" class="muted" style="display:none;margin-bottom:10px"></div>
+        <label for="plan-days">Number of days</label>
+        <select id="plan-days">
+          <option value="1">1 day</option>
+          <option value="2">2 days</option>
+          <option value="3">3 days</option>
+          <option value="4">4 days</option>
+          <option value="5">5 days</option>
+          <option value="6">6 days</option>
+          <option value="7" selected>7 days</option>
+        </select>
         <label for="plan-calories">Daily calorie target</label>
         <input type="number" id="plan-calories" placeholder="e.g. 2000" min="800" max="6000" />
         <label for="plan-protein">Daily protein target (g)</label>
@@ -132,7 +155,7 @@
           <label class="checkbox-row"><input type="checkbox" class="protein-check" value="beef" /> Beef</label>
         </div>
 
-        <button id="generate-plan-btn" class="primary-btn">Generate 7-Day Plan</button>
+        <button id="generate-plan-btn" class="primary-btn">Generate Plan</button>
         <div id="plan-status" class="muted"></div>
       </div>
       <div id="plan-result"></div>

@@ -280,6 +280,7 @@ app.post("/api/meal-plan", async (req, res) => {
     const calorieTarget = Number(req.body.calories);
     const proteinTarget = Number(req.body.protein_g);
     const diet = req.body.diet;
+    const days = Number(req.body.days) || 7;
 
     if (!Number.isFinite(calorieTarget) || calorieTarget < 800 || calorieTarget > 6000) {
       return res.status(400).json({ error: "Enter a calorie target between 800 and 6000." });
@@ -290,13 +291,16 @@ app.post("/api/meal-plan", async (req, res) => {
     if (diet !== "veg" && diet !== "non-veg") {
       return res.status(400).json({ error: "Diet must be 'veg' or 'non-veg'." });
     }
+    if (!Number.isInteger(days) || days < 1 || days > 7) {
+      return res.status(400).json({ error: "Number of days must be between 1 and 7." });
+    }
 
     const allowedProteins = diet === "veg" ? ALL_VEG_ADDONS : ALL_NONVEG_PROTEINS;
     const includedProteins = Array.isArray(req.body.included_proteins)
       ? req.body.included_proteins.filter((p) => allowedProteins.includes(p))
       : [];
 
-    const plan = await generateMealPlan(calorieTarget, proteinTarget, diet, includedProteins);
+    const plan = await generateMealPlan(calorieTarget, proteinTarget, diet, includedProteins, days);
     const mealPlan = await saveMealPlan(req.profileId, calorieTarget, proteinTarget, diet, includedProteins, plan);
     res.json({ mealPlan });
   } catch (err) {

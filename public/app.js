@@ -695,6 +695,7 @@ async function loadHistory() {
 }
 
 // --- Meal Plan tab ---
+const planDaysSelect = document.getElementById("plan-days");
 const planCaloriesInput = document.getElementById("plan-calories");
 const planProteinInput = document.getElementById("plan-protein");
 const dietButtons = document.querySelectorAll(".diet-btn");
@@ -765,12 +766,13 @@ generatePlanBtn.addEventListener("click", async () => {
     return;
   }
 
-  setBusy(generatePlanBtn, true, "Generating... (can take ~30-60s)");
+  const days = Number(planDaysSelect.value) || 7;
+  setBusy(generatePlanBtn, true, `Generating ${days}-day plan... (can take ~30-60s)`);
   try {
     const res = await fetch("/api/meal-plan", {
       method: "POST",
       headers: profileHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ calories, protein_g, diet: selectedDiet, included_proteins: getCheckedProteins() }),
+      body: JSON.stringify({ calories, protein_g, diet: selectedDiet, included_proteins: getCheckedProteins(), days }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to generate plan.");
@@ -778,7 +780,7 @@ generatePlanBtn.addEventListener("click", async () => {
   } catch (err) {
     planStatus.textContent = err.message;
   } finally {
-    setBusy(generatePlanBtn, false, "Generate 7-Day Plan");
+    setBusy(generatePlanBtn, false, "Generate Plan");
   }
 });
 
@@ -795,6 +797,7 @@ async function loadMealPlan() {
 const planTargetHint = document.getElementById("plan-target-hint");
 
 function resetMealPlanUI() {
+  planDaysSelect.value = "7";
   // Default from the saved Daily Target when there's no plan-specific value
   // yet, so the two stay in sync unless someone deliberately overrides it here.
   if (currentTargets && currentTargets.calories) {
@@ -818,6 +821,7 @@ function resetMealPlanUI() {
 }
 
 function applyMealPlan(mealPlan) {
+  planDaysSelect.value = String(Math.min(Math.max(mealPlan.days.length || 7, 1), 7));
   planCaloriesInput.value = mealPlan.calorie_target;
   planProteinInput.value = mealPlan.protein_target;
   planTargetHint.style.display = "none"; // showing this plan's own saved target, not the daily target
