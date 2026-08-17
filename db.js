@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const { neon } = require("@neondatabase/serverless");
 
 // Vercel's Postgres/Neon integration auto-injects one of these depending on
@@ -17,57 +18,150 @@ let initialized = null;
 
 async function init() {
   if (!initialized) {
-    initialized = sql`
-      CREATE TABLE IF NOT EXISTS meals (
-        id SERIAL PRIMARY KEY,
-        created_at TEXT NOT NULL,
-        date TEXT NOT NULL,
-        source TEXT NOT NULL,           -- 'voice' | 'photo' | 'text'
-        raw_input TEXT,                 -- transcript or caption
-        description TEXT NOT NULL,      -- short summary of the meal
-        items_json TEXT NOT NULL,       -- JSON array of {name, portion_desc, grams, calories, protein_g, carbs_g, fat_g}
-        calories REAL NOT NULL,
-        protein_g REAL NOT NULL,
-        carbs_g REAL NOT NULL,
-        fat_g REAL NOT NULL,
-        portion_flags_json TEXT         -- JSON array of portion flags
-      );
-    `;
+    initialized = (async () => {
+      await sql`
+        CREATE TABLE IF NOT EXISTS profiles (
+          id SERIAL PRIMARY KEY,
+          name TEXT UNIQUE NOT NULL,
+          pin_salt TEXT NOT NULL,
+          pin_hash TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS meals (
+          id SERIAL PRIMARY KEY,
+          created_at TEXT NOT NULL,
+          date TEXT NOT NULL,
+          source TEXT NOT NULL,           -- 'voice' | 'photo' | 'text'
+          raw_input TEXT,                 -- transcript or caption
+          description TEXT NOT NULL,      -- short summary of the meal
+          items_json TEXT NOT NULL,       -- JSON array of {name, portion_desc, grams, calories, protein_g, carbs_g, fat_g}
+          calories REAL NOT NULL,
+          protein_g REAL NOT NULL,
+          carbs_g REAL NOT NULL,
+          fat_g REAL NOT NULL,
+          portion_flags_json TEXT,        -- JSON array of portion flags
+          profile_id INTEGER REFERENCES profiles(id) ON DELETE CASCADE
+        );
+      `;
+
+      // Migration for deployments that had the meals table before profiles existed.
+      await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS profile_id INTEGER REFERENCES profiles(id) ON DELETE CASCADE`;
+
+      // One-time backfill: any meal logged before profiles existed gets parked
+      // under a "Legacy" profile (PIN 0000) instead of being lost/orphaned.
+      const orphans = await sql`SELECT COUNT(*)::int AS n FROM meals WHERE profile_id IS NULL`;
+      if (orphans[0].n > 0) {
+        const legacy = await rawCreateProfile("Legacy", "0000");
+        await sql`UPDATE meals SET profile_id = ${legacy.id} WHERE profile_id IS NULL`;
+      }
+    })();
   }
   return initialized;
 }
 
+// --- PIN hashing (salted PBKDF2, no extra native dependency) ---
+
+function makeSalt() {
+  return crypto.randomBytes(16).toString("hex");
+}
+
+function hashPin(pin, salt) {
+  return crypto.pbkdf2Sync(String(pin), salt, 100000, 32, "sha256").toString("hex");
+}
+
+// Insert a profile without going through init() — used both by the public
+// createProfile() and by the one-time legacy-data migration inside init()
+// itself (which must not re-enter init()).
+async function rawCreateProfile(name, pin) {
+  const salt = makeSalt();
+  const hash = hashPin(pin, salt);
+  const rows = await sql`
+    INSERT INTO profiles (name, pin_salt, pin_hash, created_at)
+    VALUES (${name}, ${salt}, ${hash}, ${new Date().toISOString()})
+    ON CONFLICT (name) DO NOTHING
+    RETURNING id, name, created_at
+  `;
+  if (rows[0]) return rows[0];
+  const existing = await sql`SELECT id, name, created_at FROM profiles WHERE name = ${name}`;
+  return existing[0];
+}
+
+async function createProfile(name, pin) {
+  await init();
+  const trimmed = (name || "").trim();
+  if (!trimmed) badRequest("Name is required.");
+  if (trimmed.length > 40) badRequest("Name is too long.");
+  if (!/^\d{4}$/.test(pin || "")) badRequest("PIN must be exactly 4 digits.");
+
+  const existing = await sql`SELECT id FROM profiles WHERE name = ${trimmed}`;
+  if (existing[0]) {
+    const err = new Error("That name is already taken. Pick another.");
+    err.status = 409;
+    throw err;
+  }
+  return rawCreateProfile(trimmed, pin);
+}
+
+async function listProfiles() {
+  await init();
+  return sql`SELECT id, name FROM profiles ORDER BY name ASC`;
+}
+
+async function verifyProfilePin(id, pin) {
+  await init();
+  const rows = await sql`SELECT id, name, pin_salt, pin_hash FROM profiles WHERE id = ${id}`;
+  const profile = rows[0];
+  if (!profile) return null;
+
+  const candidate = Buffer.from(hashPin(pin, profile.pin_salt), "hex");
+  const actual = Buffer.from(profile.pin_hash, "hex");
+  if (candidate.length !== actual.length || !crypto.timingSafeEqual(candidate, actual)) return null;
+
+  return { id: profile.id, name: profile.name };
+}
+
+function badRequest(message) {
+  const err = new Error(message);
+  err.status = 400;
+  throw err;
+}
+
+// --- Meals (all scoped to a profile) ---
+
 async function insertMeal(meal) {
   await init();
   const rows = await sql`
-    INSERT INTO meals (created_at, date, source, raw_input, description, items_json, calories, protein_g, carbs_g, fat_g, portion_flags_json)
-    VALUES (${meal.created_at}, ${meal.date}, ${meal.source}, ${meal.raw_input}, ${meal.description}, ${meal.items_json}, ${meal.calories}, ${meal.protein_g}, ${meal.carbs_g}, ${meal.fat_g}, ${meal.portion_flags_json})
+    INSERT INTO meals (created_at, date, source, raw_input, description, items_json, calories, protein_g, carbs_g, fat_g, portion_flags_json, profile_id)
+    VALUES (${meal.created_at}, ${meal.date}, ${meal.source}, ${meal.raw_input}, ${meal.description}, ${meal.items_json}, ${meal.calories}, ${meal.protein_g}, ${meal.carbs_g}, ${meal.fat_g}, ${meal.portion_flags_json}, ${meal.profile_id})
     RETURNING *
   `;
   return formatRow(rows[0]);
 }
 
-async function getMeal(id) {
+async function getMeal(id, profileId) {
   await init();
-  const rows = await sql`SELECT * FROM meals WHERE id = ${id}`;
+  const rows = await sql`SELECT * FROM meals WHERE id = ${id} AND profile_id = ${profileId}`;
   return rows[0] ? formatRow(rows[0]) : null;
 }
 
-async function listMealsForDate(date) {
+async function listMealsForDate(date, profileId) {
   await init();
-  const rows = await sql`SELECT * FROM meals WHERE date = ${date} ORDER BY created_at ASC`;
+  const rows = await sql`SELECT * FROM meals WHERE date = ${date} AND profile_id = ${profileId} ORDER BY created_at ASC`;
   return rows.map(formatRow);
 }
 
-async function listDates() {
+async function listDates(profileId) {
   await init();
-  const rows = await sql`SELECT DISTINCT date FROM meals ORDER BY date DESC`;
+  const rows = await sql`SELECT DISTINCT date FROM meals WHERE profile_id = ${profileId} ORDER BY date DESC`;
   return rows.map((r) => r.date);
 }
 
-async function deleteMeal(id) {
+async function deleteMeal(id, profileId) {
   await init();
-  await sql`DELETE FROM meals WHERE id = ${id}`;
+  await sql`DELETE FROM meals WHERE id = ${id} AND profile_id = ${profileId}`;
 }
 
 function formatRow(row) {
@@ -78,4 +172,13 @@ function formatRow(row) {
   };
 }
 
-module.exports = { insertMeal, getMeal, listMealsForDate, listDates, deleteMeal };
+module.exports = {
+  insertMeal,
+  getMeal,
+  listMealsForDate,
+  listDates,
+  deleteMeal,
+  createProfile,
+  listProfiles,
+  verifyProfilePin,
+};

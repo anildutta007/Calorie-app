@@ -1,3 +1,173 @@
+// --- Profiles ---
+const PROFILE_KEY = "calorie-app-profile";
+let currentProfile = null; // {id, name}
+let pendingProfile = null; // {id, name} awaiting PIN entry
+
+const appMain = document.getElementById("app-main");
+const profileGate = document.getElementById("profile-gate");
+const profileListStep = document.getElementById("profile-list-step");
+const profileListEl = document.getElementById("profile-list");
+const profileAddBtn = document.getElementById("profile-add-btn");
+const profilePinStep = document.getElementById("profile-pin-step");
+const profilePinName = document.getElementById("profile-pin-name");
+const profilePinInput = document.getElementById("profile-pin-input");
+const profilePinSubmit = document.getElementById("profile-pin-submit");
+const profilePinBack = document.getElementById("profile-pin-back");
+const profilePinError = document.getElementById("profile-pin-error");
+const profileNewStep = document.getElementById("profile-new-step");
+const profileNewName = document.getElementById("profile-new-name");
+const profileNewPin = document.getElementById("profile-new-pin");
+const profileNewPin2 = document.getElementById("profile-new-pin2");
+const profileNewSubmit = document.getElementById("profile-new-submit");
+const profileNewBack = document.getElementById("profile-new-back");
+const profileNewError = document.getElementById("profile-new-error");
+const currentProfileName = document.getElementById("current-profile-name");
+const switchProfileBtn = document.getElementById("switch-profile-btn");
+
+function profileHeaders(extra = {}) {
+  return { ...extra, "X-Profile-Id": currentProfile ? String(currentProfile.id) : "" };
+}
+
+async function initProfileGate() {
+  const saved = localStorage.getItem(PROFILE_KEY);
+  if (saved) {
+    try {
+      currentProfile = JSON.parse(saved);
+      enterApp();
+      return;
+    } catch (e) {
+      localStorage.removeItem(PROFILE_KEY);
+    }
+  }
+  await showProfileList();
+}
+
+async function showProfileList() {
+  profileGate.style.display = "flex";
+  appMain.style.display = "none";
+  profilePinStep.style.display = "none";
+  profileNewStep.style.display = "none";
+  profileListStep.style.display = "block";
+  const res = await fetch("/api/profiles");
+  const data = await res.json();
+  renderProfileList(data.profiles || []);
+}
+
+function renderProfileList(profiles) {
+  if (!profiles.length) {
+    profileListEl.innerHTML = `<div class="empty-state">No profiles yet — create the first one below.</div>`;
+    return;
+  }
+  profileListEl.innerHTML = profiles
+    .map((p) => `<button class="profile-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}">${escapeHtml(p.name)}</button>`)
+    .join("");
+  profileListEl.querySelectorAll(".profile-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      pendingProfile = { id: Number(btn.dataset.id), name: btn.dataset.name };
+      showPinStep();
+    });
+  });
+}
+
+function showPinStep() {
+  profileListStep.style.display = "none";
+  profilePinStep.style.display = "block";
+  profilePinName.textContent = `Enter PIN for ${pendingProfile.name}`;
+  profilePinInput.value = "";
+  profilePinError.style.display = "none";
+  profilePinInput.focus();
+}
+
+profilePinBack.addEventListener("click", showProfileList);
+profilePinSubmit.addEventListener("click", submitPin);
+profilePinInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") submitPin();
+});
+
+async function submitPin() {
+  const pin = profilePinInput.value.trim();
+  if (!/^\d{4}$/.test(pin)) {
+    profilePinError.textContent = "PIN must be 4 digits.";
+    profilePinError.style.display = "block";
+    return;
+  }
+  setBusy(profilePinSubmit, true, "Checking...");
+  try {
+    const res = await fetch(`/api/profiles/${pendingProfile.id}/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Incorrect PIN.");
+    currentProfile = { id: data.id, name: data.name };
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(currentProfile));
+    enterApp();
+  } catch (err) {
+    profilePinError.textContent = err.message;
+    profilePinError.style.display = "block";
+  } finally {
+    setBusy(profilePinSubmit, false, "Enter");
+  }
+}
+
+profileAddBtn.addEventListener("click", () => {
+  profileListStep.style.display = "none";
+  profileNewStep.style.display = "block";
+  profileNewName.value = "";
+  profileNewPin.value = "";
+  profileNewPin2.value = "";
+  profileNewError.style.display = "none";
+  profileNewName.focus();
+});
+
+profileNewBack.addEventListener("click", showProfileList);
+
+profileNewSubmit.addEventListener("click", async () => {
+  const name = profileNewName.value.trim();
+  const pin = profileNewPin.value.trim();
+  const pin2 = profileNewPin2.value.trim();
+  if (!name) return showNewError("Enter a name.");
+  if (!/^\d{4}$/.test(pin)) return showNewError("PIN must be exactly 4 digits.");
+  if (pin !== pin2) return showNewError("PINs don't match.");
+
+  setBusy(profileNewSubmit, true, "Creating...");
+  try {
+    const res = await fetch("/api/profiles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, pin }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to create profile.");
+    currentProfile = { id: data.id, name: data.name };
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(currentProfile));
+    enterApp();
+  } catch (err) {
+    showNewError(err.message);
+  } finally {
+    setBusy(profileNewSubmit, false, "Create profile");
+  }
+});
+
+function showNewError(msg) {
+  profileNewError.textContent = msg;
+  profileNewError.style.display = "block";
+}
+
+function enterApp() {
+  profileGate.style.display = "none";
+  appMain.style.display = "block";
+  currentProfileName.textContent = currentProfile.name;
+  loadToday();
+}
+
+switchProfileBtn.addEventListener("click", () => {
+  localStorage.removeItem(PROFILE_KEY);
+  currentProfile = null;
+  showProfileList();
+});
+
 // --- Tab switching ---
 const tabButtons = document.querySelectorAll(".tab-btn");
 const tabs = document.querySelectorAll(".tab");
@@ -87,7 +257,7 @@ analyzeTextBtn.addEventListener("click", async () => {
   try {
     const res = await fetch("/api/meals/text", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: profileHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ text }),
     });
     const data = await res.json();
@@ -124,7 +294,7 @@ analyzePhotoBtn.addEventListener("click", async () => {
     const formData = new FormData();
     formData.append("photo", selectedFile);
     formData.append("caption", photoCaption.value.trim());
-    const res = await fetch("/api/meals/photo", { method: "POST", body: formData });
+    const res = await fetch("/api/meals/photo", { method: "POST", headers: profileHeaders(), body: formData });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to analyze.");
     showResult(data);
@@ -219,7 +389,7 @@ function escapeHtml(str) {
 
 // --- Today tab ---
 async function loadToday() {
-  const res = await fetch("/api/meals");
+  const res = await fetch("/api/meals", { headers: profileHeaders() });
   const data = await res.json();
   renderTotals(document.getElementById("today-totals"), data.total);
   renderMealList(document.getElementById("today-list"), data.meals);
@@ -268,7 +438,7 @@ function renderMealList(container, meals) {
 
   container.querySelectorAll(".delete-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      await fetch(`/api/meals/${btn.dataset.id}`, { method: "DELETE" });
+      await fetch(`/api/meals/${btn.dataset.id}`, { method: "DELETE", headers: profileHeaders() });
       loadToday();
       loadHistory();
     });
@@ -284,11 +454,11 @@ async function loadHistory() {
     historyDateInput.value = new Date().toISOString().slice(0, 10);
   }
   const date = historyDateInput.value;
-  const res = await fetch(`/api/meals?date=${date}`);
+  const res = await fetch(`/api/meals?date=${date}`, { headers: profileHeaders() });
   const data = await res.json();
   renderTotals(document.getElementById("history-totals"), data.total);
   renderMealList(document.getElementById("history-list"), data.meals);
 }
 
 // Init
-loadToday();
+initProfileGate();

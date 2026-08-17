@@ -7,9 +7,43 @@
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="app">
+  <!-- PROFILE GATE -->
+  <div id="profile-gate" class="profile-gate">
+    <div class="profile-gate-card">
+      <h1>🍽️ Calorie Tracker</h1>
+
+      <div id="profile-list-step">
+        <div id="profile-list" class="profile-list"></div>
+        <button id="profile-add-btn" class="primary-btn">+ New profile</button>
+      </div>
+
+      <div id="profile-pin-step" style="display:none">
+        <h2 id="profile-pin-name"></h2>
+        <input id="profile-pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="4-digit PIN" />
+        <button id="profile-pin-submit" class="primary-btn">Enter</button>
+        <button id="profile-pin-back" class="link-btn">&larr; back</button>
+        <div id="profile-pin-error" class="flag over" style="display:none"></div>
+      </div>
+
+      <div id="profile-new-step" style="display:none">
+        <h2>Create a profile</h2>
+        <input id="profile-new-name" type="text" placeholder="Your name" maxlength="40" />
+        <input id="profile-new-pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="Choose a 4-digit PIN" />
+        <input id="profile-new-pin2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="Confirm PIN" />
+        <button id="profile-new-submit" class="primary-btn">Create profile</button>
+        <button id="profile-new-back" class="link-btn">&larr; back</button>
+        <div id="profile-new-error" class="flag over" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="app-main" class="app">
     <header>
       <h1>🍽️ Calorie Tracker</h1>
+      <div class="profile-bar">
+        <span id="current-profile-name" class="profile-pill"></span>
+        <button id="switch-profile-btn" class="link-btn">Switch profile</button>
+      </div>
       <nav>
         <button class="tab-btn active" data-tab="log">Log Meal</button>
         <button class="tab-btn" data-tab="today">Today</button>

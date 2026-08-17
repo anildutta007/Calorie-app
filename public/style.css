@@ -72,7 +72,7 @@ nav {
   margin: 0 0 10px;
 }
 
-textarea, input[type="text"], input[type="date"] {
+textarea, input[type="text"], input[type="date"], input[type="password"] {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -224,4 +224,78 @@ input[type="file"] {
   color: var(--muted);
   padding: 24px 0;
   font-size: 0.9rem;
+}
+
+/* --- Profile gate --- */
+
+.app { display: none; }
+
+.profile-gate {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.profile-gate-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+}
+
+.profile-gate-card h1 { font-size: 1.3rem; margin: 0 0 16px; }
+.profile-gate-card h2 { font-size: 1rem; margin: 0 0 12px; }
+
+.profile-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.profile-btn {
+  padding: 14px 8px;
+  border: 1px solid var(--border);
+  background: #fcfcfa;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.profile-btn:hover { border-color: var(--accent); }
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-top: 4px;
+  padding: 6px;
+}
+
+.profile-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.profile-pill {
+  background: var(--accent);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
