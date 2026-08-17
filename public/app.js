@@ -792,9 +792,21 @@ async function loadMealPlan() {
   }
 }
 
+const planTargetHint = document.getElementById("plan-target-hint");
+
 function resetMealPlanUI() {
-  planCaloriesInput.value = "";
-  planProteinInput.value = "";
+  // Default from the saved Daily Target when there's no plan-specific value
+  // yet, so the two stay in sync unless someone deliberately overrides it here.
+  if (currentTargets && currentTargets.calories) {
+    planCaloriesInput.value = currentTargets.calories;
+    planProteinInput.value = currentTargets.protein_g ?? "";
+    planTargetHint.textContent = "Prefilled from your Daily Target — edit below, or change the source on the Target tab.";
+    planTargetHint.style.display = "block";
+  } else {
+    planCaloriesInput.value = "";
+    planProteinInput.value = "";
+    planTargetHint.style.display = "none";
+  }
   dietButtons.forEach((b) => b.classList.toggle("active", b.dataset.diet === "veg"));
   selectedDiet = "veg";
   showDietOptions(selectedDiet);
@@ -808,6 +820,7 @@ function resetMealPlanUI() {
 function applyMealPlan(mealPlan) {
   planCaloriesInput.value = mealPlan.calorie_target;
   planProteinInput.value = mealPlan.protein_target;
+  planTargetHint.style.display = "none"; // showing this plan's own saved target, not the daily target
   dietButtons.forEach((b) => b.classList.toggle("active", b.dataset.diet === mealPlan.diet));
   selectedDiet = mealPlan.diet;
   showDietOptions(selectedDiet);
