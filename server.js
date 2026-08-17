@@ -39,7 +39,7 @@ function sumTotals(items) {
   );
 }
 
-function saveMealFromAnalysis(analysis, source, rawInput) {
+async function saveMealFromAnalysis(analysis, source, rawInput) {
   const items = analysis.items || [];
   const total = analysis.total || sumTotals(items);
   const flags = buildFlags(items);
@@ -67,7 +67,7 @@ app.post("/api/meals/text", async (req, res) => {
     const { text } = req.body;
     if (!text || !text.trim()) return res.status(400).json({ error: "Missing 'text'." });
     const analysis = await analyzeMealText(text.trim());
-    const meal = saveMealFromAnalysis(analysis, "voice", text.trim());
+    const meal = await saveMealFromAnalysis(analysis, "voice", text.trim());
     res.json(meal);
   } catch (err) {
     console.error(err);
@@ -83,7 +83,7 @@ app.post("/api/meals/photo", upload.single("photo"), async (req, res) => {
     const mediaType = req.file.mimetype || "image/jpeg";
 
     const analysis = await analyzeMealPhoto(base64, mediaType, caption || null);
-    const meal = saveMealFromAnalysis(analysis, "photo", caption || null);
+    const meal = await saveMealFromAnalysis(analysis, "photo", caption || null);
     res.json(meal);
   } catch (err) {
     console.error(err);
@@ -91,29 +91,50 @@ app.post("/api/meals/photo", upload.single("photo"), async (req, res) => {
   }
 });
 
-app.get("/api/meals", (req, res) => {
-  const date = req.query.date || todayDate();
-  const meals = listMealsForDate(date);
-  const total = sumTotals(meals);
-  res.json({ date, meals, total });
+app.get("/api/meals", async (req, res) => {
+  try {
+    const date = req.query.date || todayDate();
+    const meals = await listMealsForDate(date);
+    const total = sumTotals(meals);
+    res.json({ date, meals, total });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to load meals." });
+  }
 });
 
-app.get("/api/dates", (req, res) => {
-  res.json({ dates: listDates() });
+app.get("/api/dates", async (req, res) => {
+  try {
+    res.json({ dates: await listDates() });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to load dates." });
+  }
 });
 
-app.delete("/api/meals/:id", (req, res) => {
-  deleteMeal(Number(req.params.id));
-  res.json({ ok: true });
+app.delete("/api/meals/:id", async (req, res) => {
+  try {
+    await deleteMeal(Number(req.params.id));
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to delete meal." });
+  }
 });
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, apiKeyConfigured: Boolean(process.env.ANTHROPIC_API_KEY) });
 });
 
-app.listen(PORT, () => {
-  console.log(`Calorie tracker listening on http://localhost:${PORT}`);
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn("WARNING: ANTHROPIC_API_KEY is not set. Meal analysis endpoints will fail until it is configured.");
-  }
-});
+// When run directly (npm start, or Render), start a normal listening server.
+// When imported by Vercel's serverless runtime, just export the app instead.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Calorie tracker listening on http://localhost:${PORT}`);
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.warn("WARNING: ANTHROPIC_API_KEY is not set. Meal analysis endpoints will fail until it is configured.");
+    }
+  });
+}
+
+module.exports = app;
