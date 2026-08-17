@@ -49,6 +49,7 @@
         <button class="tab-btn" data-tab="today">Today</button>
         <button class="tab-btn" data-tab="history">History</button>
         <button class="tab-btn" data-tab="plan">Meal Plan</button>
+        <button class="tab-btn" data-tab="target">Target</button>
       </nav>
     </header>
 
@@ -77,52 +78,6 @@
 
     <!-- TODAY TAB -->
     <section id="tab-today" class="tab">
-      <div class="card">
-        <div class="target-header">
-          <h2>🎯 Daily Target</h2>
-          <button id="edit-target-btn" class="link-btn" type="button">Edit</button>
-        </div>
-        <div id="target-display" class="muted">No daily target set yet.</div>
-        <div id="target-form" style="display:none">
-          <div class="target-calc-box">
-            <div class="muted" style="margin-bottom:8px">Not sure what your numbers should be? Calculate a suggested target:</div>
-            <label for="calc-age">Age</label>
-            <input type="number" id="calc-age" placeholder="e.g. 35" min="2" max="120" />
-            <label>Sex</label>
-            <div class="diet-toggle">
-              <button type="button" class="sex-btn active" data-sex="male">Male</button>
-              <button type="button" class="sex-btn" data-sex="female">Female</button>
-            </div>
-            <label for="calc-weight">Weight (kg)</label>
-            <input type="number" id="calc-weight" placeholder="e.g. 70" min="10" max="300" />
-            <label for="calc-height">Height (cm)</label>
-            <input type="number" id="calc-height" placeholder="e.g. 170" min="50" max="250" />
-            <label for="calc-activity">Activity level</label>
-            <select id="calc-activity">
-              <option value="sedentary">Sedentary (little/no exercise)</option>
-              <option value="light" selected>Lightly active (1-3 days/week)</option>
-              <option value="moderate">Moderately active (3-5 days/week)</option>
-              <option value="active">Very active (6-7 days/week)</option>
-              <option value="very_active">Extremely active (physical job + training)</option>
-            </select>
-            <button id="calc-target-btn" class="secondary-btn" type="button">📐 Calculate My Target</button>
-            <div id="calc-status" class="muted"></div>
-            <div class="flag under" style="margin-top:10px">ℹ️ General estimate for healthy adults, not medical advice. For children, pregnancy, or medical conditions, please check with a doctor or dietitian.</div>
-          </div>
-
-          <label for="target-calories">Calories</label>
-          <input type="number" id="target-calories" placeholder="e.g. 2000" min="0" max="10000" />
-          <label for="target-protein">Protein (g)</label>
-          <input type="number" id="target-protein" placeholder="e.g. 120" min="0" max="600" />
-          <label for="target-carbs">Carbs (g)</label>
-          <input type="number" id="target-carbs" placeholder="e.g. 250" min="0" max="1200" />
-          <label for="target-fat">Fat (g)</label>
-          <input type="number" id="target-fat" placeholder="e.g. 65" min="0" max="400" />
-          <button id="save-target-btn" class="primary-btn" type="button">Save Target</button>
-          <button id="cancel-target-btn" class="link-btn" type="button">Cancel</button>
-          <div id="target-form-error" class="flag over" style="display:none"></div>
-        </div>
-      </div>
       <div class="card totals-card">
         <h2>Today's totals</h2>
         <div id="today-totals" class="totals-grid"></div>
@@ -180,6 +135,59 @@
         <div id="plan-status" class="muted"></div>
       </div>
       <div id="plan-result"></div>
+    </section>
+
+    <!-- TARGET TAB -->
+    <section id="tab-target" class="tab">
+      <div class="card">
+        <div class="target-header">
+          <h2>🎯 Daily Target</h2>
+          <button id="edit-target-btn" class="link-btn" type="button">Edit</button>
+        </div>
+        <div id="target-display" class="muted">No daily target set yet.</div>
+        <div id="target-form" style="display:none">
+          <div class="target-calc-box">
+            <div class="muted" style="margin-bottom:8px">Not sure what your numbers should be? Calculate a suggested target:</div>
+            <label for="calc-age">Age</label>
+            <input type="number" id="calc-age" placeholder="e.g. 35" min="2" max="120" />
+            <label>Sex</label>
+            <div class="diet-toggle">
+              <button type="button" class="sex-btn active" data-sex="male">Male</button>
+              <button type="button" class="sex-btn" data-sex="female">Female</button>
+            </div>
+            <label for="calc-weight">Weight (kg)</label>
+            <input type="number" id="calc-weight" placeholder="e.g. 70" min="10" max="300" />
+            <label for="calc-height">Height (cm)</label>
+            <input type="number" id="calc-height" placeholder="e.g. 170" min="50" max="250" />
+            <label for="calc-activity">Activity level</label>
+            <select id="calc-activity">
+              <option value="sedentary">Sedentary (little/no exercise)</option>
+              <option value="light" selected>Lightly active (1-3 days/week)</option>
+              <option value="moderate">Moderately active (3-5 days/week)</option>
+              <option value="active">Very active (6-7 days/week)</option>
+              <option value="very_active">Extremely active (physical job + training)</option>
+            </select>
+            <button id="calc-target-btn" class="secondary-btn" type="button">📐 Calculate My Target</button>
+            <div id="calc-status" class="muted"></div>
+            <div class="flag under" style="margin-top:10px">ℹ️ General estimate for healthy adults, not medical advice. For children, pregnancy, or medical conditions, please check with a doctor or dietitian.</div>
+          </div>
+
+          <label for="target-calories">Calories</label>
+          <input type="number" id="target-calories" placeholder="e.g. 2000" min="0" max="10000" />
+          <label for="target-protein">Protein (g)</label>
+          <input type="number" id="target-protein" placeholder="e.g. 120" min="0" max="600" />
+          <label for="target-carbs">Carbs (g)</label>
+          <input type="number" id="target-carbs" placeholder="e.g. 250" min="0" max="1200" />
+          <label for="target-fat">Fat (g)</label>
+          <input type="number" id="target-fat" placeholder="e.g. 65" min="0" max="400" />
+          <button id="save-target-btn" class="primary-btn" type="button">Save Target</button>
+          <button id="cancel-target-btn" class="link-btn" type="button">Cancel</button>
+          <div id="target-form-error" class="flag over" style="display:none"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="muted">This target drives the color-coded totals and day summary on the Today and History tabs.</div>
+      </div>
     </section>
   </div>
 

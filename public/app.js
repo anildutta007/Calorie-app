@@ -184,6 +184,10 @@ tabButtons.forEach((btn) => {
     if (btn.dataset.tab === "today") loadToday();
     if (btn.dataset.tab === "history") loadHistory();
     if (btn.dataset.tab === "plan") loadMealPlan();
+    if (btn.dataset.tab === "target") {
+      loadBio();
+      loadTargets();
+    }
   });
 });
 
