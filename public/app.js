@@ -2,6 +2,7 @@
 const PROFILE_KEY = "calorie-app-profile";
 let currentProfile = null; // {id, name}
 let pendingProfile = null; // {id, name} awaiting PIN entry
+let currentTargets = null; // {calories, protein_g, carbs_g, fat_g} | null - this profile's daily nutrition target
 
 const appMain = document.getElementById("app-main");
 const profileGate = document.getElementById("profile-gate");
@@ -159,12 +160,13 @@ function enterApp() {
   profileGate.style.display = "none";
   appMain.style.display = "block";
   currentProfileName.textContent = currentProfile.name;
-  loadToday();
+  loadTargets().then(loadToday);
 }
 
 switchProfileBtn.addEventListener("click", () => {
   localStorage.removeItem(PROFILE_KEY);
   currentProfile = null;
+  currentTargets = null;
   showProfileList();
 });
 
@@ -415,11 +417,131 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// --- Daily targets ---
+const targetDisplay = document.getElementById("target-display");
+const targetForm = document.getElementById("target-form");
+const editTargetBtn = document.getElementById("edit-target-btn");
+const cancelTargetBtn = document.getElementById("cancel-target-btn");
+const saveTargetBtn = document.getElementById("save-target-btn");
+const targetFormError = document.getElementById("target-form-error");
+const targetCaloriesInput = document.getElementById("target-calories");
+const targetProteinInput = document.getElementById("target-protein");
+const targetCarbsInput = document.getElementById("target-carbs");
+const targetFatInput = document.getElementById("target-fat");
+
+async function loadTargets() {
+  const res = await fetch("/api/profile/targets", { headers: profileHeaders() });
+  const data = await res.json();
+  currentTargets = data.targets;
+  renderTargetDisplay();
+}
+
+function renderTargetDisplay() {
+  targetForm.style.display = "none";
+  targetDisplay.style.display = "block";
+  if (currentTargets && currentTargets.calories) {
+    const bits = [`${Math.round(currentTargets.calories)} kcal`];
+    if (currentTargets.protein_g) bits.push(`${Math.round(currentTargets.protein_g)}g protein`);
+    if (currentTargets.carbs_g) bits.push(`${Math.round(currentTargets.carbs_g)}g carbs`);
+    if (currentTargets.fat_g) bits.push(`${Math.round(currentTargets.fat_g)}g fat`);
+    targetDisplay.textContent = bits.join(" · ");
+  } else {
+    targetDisplay.textContent = "No daily target set yet.";
+  }
+}
+
+editTargetBtn.addEventListener("click", () => {
+  targetDisplay.style.display = "none";
+  targetForm.style.display = "block";
+  targetFormError.style.display = "none";
+  targetCaloriesInput.value = currentTargets?.calories ?? "";
+  targetProteinInput.value = currentTargets?.protein_g ?? "";
+  targetCarbsInput.value = currentTargets?.carbs_g ?? "";
+  targetFatInput.value = currentTargets?.fat_g ?? "";
+});
+
+cancelTargetBtn.addEventListener("click", renderTargetDisplay);
+
+saveTargetBtn.addEventListener("click", async () => {
+  setBusy(saveTargetBtn, true, "Saving...");
+  targetFormError.style.display = "none";
+  try {
+    const res = await fetch("/api/profile/targets", {
+      method: "PUT",
+      headers: profileHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        calories: targetCaloriesInput.value,
+        protein_g: targetProteinInput.value,
+        carbs_g: targetCarbsInput.value,
+        fat_g: targetFatInput.value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to save target.");
+    currentTargets = data.targets;
+    renderTargetDisplay();
+    loadToday();
+    loadHistory();
+  } catch (err) {
+    targetFormError.textContent = err.message;
+    targetFormError.style.display = "block";
+  } finally {
+    setBusy(saveTargetBtn, false, "Save Target");
+  }
+});
+
+// mode "ceiling" = don't exceed the target (calories/carbs/fat): at/under is good.
+// mode "floor" = meet or beat the target (protein): at/over is good.
+function macroStatus(value, target, mode) {
+  if (!target) return null;
+  const ratio = value / target;
+  if (mode === "floor") {
+    if (ratio >= 1) return "good";
+    if (ratio >= 0.8) return "warn";
+    return "bad";
+  }
+  if (ratio <= 1) return "good";
+  if (ratio <= 1.1) return "warn";
+  return "bad";
+}
+
+function targetStatBlock(value, label, target, mode) {
+  const status = macroStatus(value, target, mode);
+  const cls = status ? ` stat-${status}` : "";
+  let note = "";
+  if (target) {
+    const diff = target - value;
+    note =
+      mode === "floor"
+        ? diff <= 0
+          ? "Goal met"
+          : `${round1(diff)} to go`
+        : diff >= 0
+        ? `${Math.round(diff)} left`
+        : `${Math.round(-diff)} over`;
+  }
+  return `<div class="stat-block${cls}"><div class="stat-value">${value}</div><div class="stat-label">${label}</div>${
+    note ? `<div class="stat-target">${note}</div>` : ""
+  }</div>`;
+}
+
+function daySummaryLine(total) {
+  if (!currentTargets || !currentTargets.calories) return "";
+  const parts = [];
+  const calDiff = currentTargets.calories - total.calories;
+  parts.push(calDiff >= 0 ? `${Math.round(calDiff)} kcal remaining` : `${Math.round(-calDiff)} kcal over target`);
+  if (currentTargets.protein_g) {
+    const proteinDiff = currentTargets.protein_g - total.protein_g;
+    parts.push(proteinDiff <= 0 ? "protein goal met" : `${round1(proteinDiff)}g more protein needed`);
+  }
+  return parts.join(" · ");
+}
+
 // --- Today tab ---
 async function loadToday() {
   const res = await fetch("/api/meals", { headers: profileHeaders() });
   const data = await res.json();
-  renderTotals(document.getElementById("today-totals"), data.total);
+  renderTotals(document.getElementById("today-totals"), data.total, document.getElementById("today-summary"));
   renderMealList(document.getElementById("today-list"), data.meals);
   renderAllFlags(document.getElementById("today-flags"), data.meals);
 }
@@ -429,13 +551,18 @@ function renderAllFlags(container, meals) {
   container.innerHTML = flags.length ? renderFlags(flags) : "";
 }
 
-function renderTotals(container, total) {
+function renderTotals(container, total, summaryEl) {
   container.innerHTML = `
-    ${statBlock(Math.round(total.calories), "kcal")}
-    ${statBlock(round1(total.protein_g), "protein g")}
-    ${statBlock(round1(total.carbs_g), "carbs g")}
-    ${statBlock(round1(total.fat_g), "fat g")}
+    ${targetStatBlock(Math.round(total.calories), "kcal", currentTargets?.calories, "ceiling")}
+    ${targetStatBlock(round1(total.protein_g), "protein g", currentTargets?.protein_g, "floor")}
+    ${targetStatBlock(round1(total.carbs_g), "carbs g", currentTargets?.carbs_g, "ceiling")}
+    ${targetStatBlock(round1(total.fat_g), "fat g", currentTargets?.fat_g, "ceiling")}
   `;
+  if (summaryEl) {
+    const line = daySummaryLine(total);
+    summaryEl.textContent = line;
+    summaryEl.style.display = line ? "block" : "none";
+  }
 }
 
 function renderMealList(container, meals) {
@@ -484,7 +611,7 @@ async function loadHistory() {
   const date = historyDateInput.value;
   const res = await fetch(`/api/meals?date=${date}`, { headers: profileHeaders() });
   const data = await res.json();
-  renderTotals(document.getElementById("history-totals"), data.total);
+  renderTotals(document.getElementById("history-totals"), data.total, document.getElementById("history-summary"));
   renderMealList(document.getElementById("history-list"), data.meals);
 }
 

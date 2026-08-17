@@ -15,6 +15,8 @@ const {
   saveMealPlan,
   getLatestMealPlan,
   saveMealPlanRecipes,
+  getProfileTargets,
+  setProfileTargets,
 } = require("./db");
 const { analyzeMealText, analyzeMealPhoto } = require("./nutrition");
 const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mealplan");
@@ -44,6 +46,7 @@ function requireProfile(req, res, next) {
 app.use("/api/meals", requireProfile);
 app.use("/api/dates", requireProfile);
 app.use("/api/meal-plan", requireProfile);
+app.use("/api/profile", requireProfile);
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD (server local/UTC date)
@@ -120,6 +123,42 @@ app.post("/api/profiles/:id/verify", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || "Failed to verify PIN." });
+  }
+});
+
+// --- Daily nutrition targets (require X-Profile-Id) ---
+
+app.get("/api/profile/targets", async (req, res) => {
+  try {
+    res.json({ targets: await getProfileTargets(req.profileId) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to load target." });
+  }
+});
+
+app.put("/api/profile/targets", async (req, res) => {
+  try {
+    function cleanNum(v, max, label) {
+      if (v === null || v === undefined || v === "") return null;
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0 || n > max) {
+        const err = new Error(`Enter a valid ${label} between 0 and ${max}, or leave it blank.`);
+        err.status = 400;
+        throw err;
+      }
+      return n;
+    }
+    const targets = {
+      calories: cleanNum(req.body.calories, 10000, "calorie target"),
+      protein_g: cleanNum(req.body.protein_g, 600, "protein target"),
+      carbs_g: cleanNum(req.body.carbs_g, 1200, "carbs target"),
+      fat_g: cleanNum(req.body.fat_g, 400, "fat target"),
+    };
+    res.json({ targets: await setProfileTargets(req.profileId, targets) });
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message || "Failed to save target." });
   }
 });
 

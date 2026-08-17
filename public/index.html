@@ -77,9 +77,30 @@
 
     <!-- TODAY TAB -->
     <section id="tab-today" class="tab">
+      <div class="card">
+        <div class="target-header">
+          <h2>🎯 Daily Target</h2>
+          <button id="edit-target-btn" class="link-btn" type="button">Edit</button>
+        </div>
+        <div id="target-display" class="muted">No daily target set yet.</div>
+        <div id="target-form" style="display:none">
+          <label for="target-calories">Calories</label>
+          <input type="number" id="target-calories" placeholder="e.g. 2000" min="0" max="10000" />
+          <label for="target-protein">Protein (g)</label>
+          <input type="number" id="target-protein" placeholder="e.g. 120" min="0" max="600" />
+          <label for="target-carbs">Carbs (g)</label>
+          <input type="number" id="target-carbs" placeholder="e.g. 250" min="0" max="1200" />
+          <label for="target-fat">Fat (g)</label>
+          <input type="number" id="target-fat" placeholder="e.g. 65" min="0" max="400" />
+          <button id="save-target-btn" class="primary-btn" type="button">Save Target</button>
+          <button id="cancel-target-btn" class="link-btn" type="button">Cancel</button>
+          <div id="target-form-error" class="flag over" style="display:none"></div>
+        </div>
+      </div>
       <div class="card totals-card">
         <h2>Today's totals</h2>
         <div id="today-totals" class="totals-grid"></div>
+        <div id="today-summary" class="day-summary"></div>
       </div>
       <div id="today-flags"></div>
       <div id="today-list" class="meal-list"></div>
@@ -94,6 +115,7 @@
       <div class="card totals-card">
         <h2>Totals</h2>
         <div id="history-totals" class="totals-grid"></div>
+        <div id="history-summary" class="day-summary"></div>
       </div>
       <div id="history-list" class="meal-list"></div>
     </section>

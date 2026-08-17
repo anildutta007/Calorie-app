@@ -75,6 +75,12 @@ async function init() {
       // Migration for deployments created before included_proteins/recipes_json existed.
       await sql`ALTER TABLE meal_plans ADD COLUMN IF NOT EXISTS included_proteins TEXT`;
       await sql`ALTER TABLE meal_plans ADD COLUMN IF NOT EXISTS recipes_json TEXT`;
+
+      // Daily nutrition targets, one ongoing set per profile (not per-day).
+      await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS target_calories REAL`;
+      await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS target_protein_g REAL`;
+      await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS target_carbs_g REAL`;
+      await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS target_fat_g REAL`;
     })();
   }
   return initialized;
@@ -237,6 +243,38 @@ function formatMealPlanRow(row) {
   };
 }
 
+// --- Daily nutrition targets (one ongoing set per profile) ---
+
+function formatTargets(row) {
+  if (!row) return null;
+  return {
+    calories: row.target_calories,
+    protein_g: row.target_protein_g,
+    carbs_g: row.target_carbs_g,
+    fat_g: row.target_fat_g,
+  };
+}
+
+async function getProfileTargets(profileId) {
+  await init();
+  const rows = await sql`
+    SELECT target_calories, target_protein_g, target_carbs_g, target_fat_g FROM profiles WHERE id = ${profileId}
+  `;
+  return formatTargets(rows[0]);
+}
+
+async function setProfileTargets(profileId, targets) {
+  await init();
+  const rows = await sql`
+    UPDATE profiles
+    SET target_calories = ${targets.calories}, target_protein_g = ${targets.protein_g},
+        target_carbs_g = ${targets.carbs_g}, target_fat_g = ${targets.fat_g}
+    WHERE id = ${profileId}
+    RETURNING target_calories, target_protein_g, target_carbs_g, target_fat_g
+  `;
+  return formatTargets(rows[0]);
+}
+
 module.exports = {
   insertMeal,
   getMeal,
@@ -249,4 +287,6 @@ module.exports = {
   saveMealPlan,
   getLatestMealPlan,
   saveMealPlanRecipes,
+  getProfileTargets,
+  setProfileTargets,
 };

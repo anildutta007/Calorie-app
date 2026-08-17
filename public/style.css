@@ -535,3 +535,33 @@ input[type="file"] {
     font-size: 0.9rem;
   }
 }
+
+/* --- Daily targets, color-coded totals, day summary --- */
+
+.target-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.target-header h2 { margin: 0; }
+
+.stat-block .stat-target {
+  font-size: 0.68rem;
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.stat-good .stat-value, .stat-good .stat-target { color: var(--accent-dark); }
+.stat-warn .stat-value, .stat-warn .stat-target { color: var(--warn); }
+.stat-bad .stat-value, .stat-bad .stat-target { color: var(--over); }
+
+.day-summary {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+  display: none;
+}
