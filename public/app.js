@@ -617,34 +617,32 @@ function renderAllFlags(container, meals) {
   container.innerHTML = flags.length ? renderFlags(flags) : "";
 }
 
-// Today/History show the 4 daily totals as a swipeable carousel (one big
-// stat at a time) instead of a static grid - other totals displays (meal
+// Today/History show the 4 daily totals as a big calorie progress bar plus
+// a row of 3 mini bars for carbs/fat/protein - other totals displays (meal
 // cards, Log Meal result, Meal Plan days) are untouched and keep the grid.
 function renderTotals(container, total, summaryEl) {
-  const stats = [
-    { value: Math.round(total.calories), label: "kcal", target: currentTargets?.calories, mode: "ceiling" },
-    { value: round1(total.protein_g), label: "protein g", target: currentTargets?.protein_g, mode: "floor" },
-    { value: round1(total.carbs_g), label: "carbs g", target: currentTargets?.carbs_g, mode: "ceiling" },
-    { value: round1(total.fat_g), label: "fat g", target: currentTargets?.fat_g, mode: "ceiling" },
+  const calories = { value: Math.round(total.calories), target: currentTargets?.calories, mode: "ceiling", label: "Calories", unit: " cal" };
+  const minis = [
+    { value: round1(total.carbs_g), target: currentTargets?.carbs_g, mode: "ceiling", label: "Carbs", unit: "g" },
+    { value: round1(total.fat_g), target: currentTargets?.fat_g, mode: "ceiling", label: "Fat", unit: "g" },
+    { value: round1(total.protein_g), target: currentTargets?.protein_g, mode: "floor", label: "Protein", unit: "g" },
   ];
 
   container.innerHTML = `
-    <div class="stat-carousel">
-      <div class="carousel-main">
-        <button class="carousel-arrow carousel-prev" type="button" aria-label="Previous stat">&lsaquo;</button>
-        <div class="carousel-viewport">
-          <div class="carousel-track">${stats.map(carouselSlide).join("")}</div>
-        </div>
-        <button class="carousel-arrow carousel-next" type="button" aria-label="Next stat">&rsaquo;</button>
+    <div class="stat-hero">
+      <div class="stat-hero-label">${calories.label}</div>
+      <div class="stat-hero-row">
+        <div class="stat-hero-value">${fmt(calories.value)}${calories.unit}${
+    calories.target ? `<span class="stat-hero-of"> / ${fmt(Math.round(calories.target))}</span>` : ""
+  }</div>
+        ${heroRemainingHtml(calories)}
       </div>
-      <div class="carousel-dots">
-        ${stats
-          .map((s, i) => `<button class="carousel-dot${i === 0 ? " active" : ""}" type="button" data-index="${i}" aria-label="${s.label}"></button>`)
-          .join("")}
-      </div>
+      ${barHtml(calories)}
+    </div>
+    <div class="stat-mini-row">
+      ${minis.map(miniStatHtml).join("")}
     </div>
   `;
-  initStatCarousel(container);
 
   if (summaryEl) {
     const line = daySummaryLine(total);
@@ -653,50 +651,40 @@ function renderTotals(container, total, summaryEl) {
   }
 }
 
-function carouselSlide(stat) {
-  const status = macroStatus(stat.value, stat.target, stat.mode);
-  const cls = status ? ` stat-${status}` : "";
-  const note = statNote(stat.value, stat.target, stat.mode);
-  return `
-    <div class="carousel-slide">
-      <div class="carousel-stat-value${cls}">${stat.value}</div>
-      <div class="carousel-stat-label">${stat.label}</div>
-      ${note ? `<div class="carousel-stat-target">${note}</div>` : ""}
-    </div>`;
+function fmt(n) {
+  return n.toLocaleString();
 }
 
-function initStatCarousel(container) {
-  const track = container.querySelector(".carousel-track");
-  const dots = container.querySelectorAll(".carousel-dot");
-  const prevBtn = container.querySelector(".carousel-prev");
-  const nextBtn = container.querySelector(".carousel-next");
-  const count = dots.length;
-  let index = 0;
+function barPercent(stat) {
+  if (!stat.target) return 0;
+  return Math.max(0, Math.min(100, (stat.value / stat.target) * 100));
+}
 
-  function goTo(i) {
-    index = (i + count) % count;
-    track.style.transform = `translateX(-${index * 100}%)`;
-    dots.forEach((d, di) => d.classList.toggle("active", di === index));
+function barHtml(stat, thin) {
+  const status = macroStatus(stat.value, stat.target, stat.mode) || "good";
+  return `<div class="stat-bar-track${thin ? " thin" : ""}"><div class="stat-bar-fill stat-${status}" style="width:${barPercent(stat)}%"></div></div>`;
+}
+
+function heroRemainingHtml(stat) {
+  if (!stat.target) return "";
+  const diff = stat.target - stat.value;
+  if (stat.mode === "floor") {
+    if (diff <= 0) return `<div class="stat-hero-remaining">Goal met</div>`;
+    return `<div class="stat-hero-remaining"><strong>${fmt(round1(diff))}</strong> to go</div>`;
   }
+  if (diff >= 0) return `<div class="stat-hero-remaining"><strong>${fmt(Math.round(diff))}</strong> left</div>`;
+  return `<div class="stat-hero-remaining"><strong>${fmt(Math.round(-diff))}</strong> over</div>`;
+}
 
-  prevBtn.addEventListener("click", () => goTo(index - 1));
-  nextBtn.addEventListener("click", () => goTo(index + 1));
-  dots.forEach((d) => d.addEventListener("click", () => goTo(Number(d.dataset.index))));
-
-  let startX = null;
-  track.addEventListener("touchstart", (e) => (startX = e.touches[0].clientX), { passive: true });
-  track.addEventListener(
-    "touchend",
-    (e) => {
-      if (startX === null) return;
-      const dx = e.changedTouches[0].clientX - startX;
-      if (Math.abs(dx) > 40) goTo(dx < 0 ? index + 1 : index - 1);
-      startX = null;
-    },
-    { passive: true }
-  );
-
-  goTo(0);
+function miniStatHtml(stat) {
+  return `
+    <div class="stat-mini">
+      <div class="stat-mini-label">${stat.label}</div>
+      <div class="stat-mini-value">${fmt(stat.value)}${stat.unit}${
+    stat.target ? `<span class="stat-mini-of"> / ${fmt(Math.round(stat.target))}</span>` : ""
+  }</div>
+      ${barHtml(stat, true)}
+    </div>`;
 }
 
 let mealsById = {}; // last-rendered meals, keyed by id, so Edit can look up full item data without refetching
