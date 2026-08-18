@@ -584,24 +584,11 @@ function macroStatus(value, target, mode) {
   return "bad";
 }
 
-function targetStatBlock(value, label, target, mode) {
-  const status = macroStatus(value, target, mode);
-  const cls = status ? ` stat-${status}` : "";
-  let note = "";
-  if (target) {
-    const diff = target - value;
-    note =
-      mode === "floor"
-        ? diff <= 0
-          ? "Goal met"
-          : `${round1(diff)} to go`
-        : diff >= 0
-        ? `${Math.round(diff)} left`
-        : `${Math.round(-diff)} over`;
-  }
-  return `<div class="stat-block${cls}"><div class="stat-value">${value}</div><div class="stat-label">${label}</div>${
-    note ? `<div class="stat-target">${note}</div>` : ""
-  }</div>`;
+function statNote(value, target, mode) {
+  if (!target) return "";
+  const diff = target - value;
+  if (mode === "floor") return diff <= 0 ? "Goal met" : `${round1(diff)} to go`;
+  return diff >= 0 ? `${Math.round(diff)} left` : `${Math.round(-diff)} over`;
 }
 
 function daySummaryLine(total) {
@@ -630,18 +617,86 @@ function renderAllFlags(container, meals) {
   container.innerHTML = flags.length ? renderFlags(flags) : "";
 }
 
+// Today/History show the 4 daily totals as a swipeable carousel (one big
+// stat at a time) instead of a static grid - other totals displays (meal
+// cards, Log Meal result, Meal Plan days) are untouched and keep the grid.
 function renderTotals(container, total, summaryEl) {
+  const stats = [
+    { value: Math.round(total.calories), label: "kcal", target: currentTargets?.calories, mode: "ceiling" },
+    { value: round1(total.protein_g), label: "protein g", target: currentTargets?.protein_g, mode: "floor" },
+    { value: round1(total.carbs_g), label: "carbs g", target: currentTargets?.carbs_g, mode: "ceiling" },
+    { value: round1(total.fat_g), label: "fat g", target: currentTargets?.fat_g, mode: "ceiling" },
+  ];
+
   container.innerHTML = `
-    ${targetStatBlock(Math.round(total.calories), "kcal", currentTargets?.calories, "ceiling")}
-    ${targetStatBlock(round1(total.protein_g), "protein g", currentTargets?.protein_g, "floor")}
-    ${targetStatBlock(round1(total.carbs_g), "carbs g", currentTargets?.carbs_g, "ceiling")}
-    ${targetStatBlock(round1(total.fat_g), "fat g", currentTargets?.fat_g, "ceiling")}
+    <div class="stat-carousel">
+      <div class="carousel-main">
+        <button class="carousel-arrow carousel-prev" type="button" aria-label="Previous stat">&lsaquo;</button>
+        <div class="carousel-viewport">
+          <div class="carousel-track">${stats.map(carouselSlide).join("")}</div>
+        </div>
+        <button class="carousel-arrow carousel-next" type="button" aria-label="Next stat">&rsaquo;</button>
+      </div>
+      <div class="carousel-dots">
+        ${stats
+          .map((s, i) => `<button class="carousel-dot${i === 0 ? " active" : ""}" type="button" data-index="${i}" aria-label="${s.label}"></button>`)
+          .join("")}
+      </div>
+    </div>
   `;
+  initStatCarousel(container);
+
   if (summaryEl) {
     const line = daySummaryLine(total);
     summaryEl.textContent = line;
     summaryEl.style.display = line ? "block" : "none";
   }
+}
+
+function carouselSlide(stat) {
+  const status = macroStatus(stat.value, stat.target, stat.mode);
+  const cls = status ? ` stat-${status}` : "";
+  const note = statNote(stat.value, stat.target, stat.mode);
+  return `
+    <div class="carousel-slide">
+      <div class="carousel-stat-value${cls}">${stat.value}</div>
+      <div class="carousel-stat-label">${stat.label}</div>
+      ${note ? `<div class="carousel-stat-target">${note}</div>` : ""}
+    </div>`;
+}
+
+function initStatCarousel(container) {
+  const track = container.querySelector(".carousel-track");
+  const dots = container.querySelectorAll(".carousel-dot");
+  const prevBtn = container.querySelector(".carousel-prev");
+  const nextBtn = container.querySelector(".carousel-next");
+  const count = dots.length;
+  let index = 0;
+
+  function goTo(i) {
+    index = (i + count) % count;
+    track.style.transform = `translateX(-${index * 100}%)`;
+    dots.forEach((d, di) => d.classList.toggle("active", di === index));
+  }
+
+  prevBtn.addEventListener("click", () => goTo(index - 1));
+  nextBtn.addEventListener("click", () => goTo(index + 1));
+  dots.forEach((d) => d.addEventListener("click", () => goTo(Number(d.dataset.index))));
+
+  let startX = null;
+  track.addEventListener("touchstart", (e) => (startX = e.touches[0].clientX), { passive: true });
+  track.addEventListener(
+    "touchend",
+    (e) => {
+      if (startX === null) return;
+      const dx = e.changedTouches[0].clientX - startX;
+      if (Math.abs(dx) > 40) goTo(dx < 0 ? index + 1 : index - 1);
+      startX = null;
+    },
+    { passive: true }
+  );
+
+  goTo(0);
 }
 
 let mealsById = {}; // last-rendered meals, keyed by id, so Edit can look up full item data without refetching
