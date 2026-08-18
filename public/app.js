@@ -621,7 +621,7 @@ async function loadToday() {
   const res = await fetch("/api/meals", { headers: profileHeaders() });
   const data = await res.json();
   renderTotals(document.getElementById("today-totals"), data.total, document.getElementById("today-summary"));
-  renderMealList(document.getElementById("today-list"), data.meals);
+  renderMealList(document.getElementById("today-list"), data.meals, true);
   renderAllFlags(document.getElementById("today-flags"), data.meals);
 }
 
@@ -644,7 +644,11 @@ function renderTotals(container, total, summaryEl) {
   }
 }
 
-function renderMealList(container, meals) {
+let mealsById = {}; // last-rendered meals, keyed by id, so Edit can look up full item data without refetching
+
+function renderMealList(container, meals, showEdit) {
+  meals.forEach((m) => (mealsById[m.id] = m));
+
   if (!meals.length) {
     container.innerHTML = `<div class="empty-state">No meals logged yet.</div>`;
     return;
@@ -658,7 +662,10 @@ function renderMealList(container, meals) {
       <div class="meal-card">
         <div class="meal-card-header">
           <h3>${escapeHtml(m.description)}</h3>
-          <button class="delete-btn" data-id="${m.id}">Delete</button>
+          <div class="meal-card-actions">
+            ${showEdit ? `<button class="edit-btn" data-id="${m.id}">Edit</button>` : ""}
+            <button class="delete-btn" data-id="${m.id}">Delete</button>
+          </div>
         </div>
         <div class="meal-time">${dateStr} · ${timeStr} · ${m.source}</div>
         ${renderItems(m.items)}
@@ -679,6 +686,10 @@ function renderMealList(container, meals) {
       loadHistory();
     });
   });
+
+  container.querySelectorAll(".edit-btn").forEach((btn) => {
+    btn.addEventListener("click", () => openEditMealModal(mealsById[btn.dataset.id]));
+  });
 }
 
 // --- History tab ---
@@ -695,6 +706,104 @@ async function loadHistory() {
   renderTotals(document.getElementById("history-totals"), data.total, document.getElementById("history-summary"));
   renderMealList(document.getElementById("history-list"), data.meals);
 }
+
+// --- Edit meal modal (Today tab only) ---
+const editMealModal = document.getElementById("edit-meal-modal");
+const editMealDescriptionInput = document.getElementById("edit-meal-description");
+const editMealItemsContainer = document.getElementById("edit-meal-items");
+const editMealAddItemBtn = document.getElementById("edit-meal-add-item-btn");
+const editMealSaveBtn = document.getElementById("edit-meal-save-btn");
+const editMealError = document.getElementById("edit-meal-error");
+let editingMealId = null;
+
+document.getElementById("edit-meal-modal-close").addEventListener("click", () => {
+  editMealModal.style.display = "none";
+});
+editMealModal.addEventListener("click", (e) => {
+  if (e.target === editMealModal) editMealModal.style.display = "none";
+});
+
+function openEditMealModal(meal) {
+  if (!meal) return;
+  editingMealId = meal.id;
+  editMealError.style.display = "none";
+  editMealDescriptionInput.value = meal.description;
+  editMealItemsContainer.innerHTML = "";
+  meal.items.forEach((it) => editMealItemsContainer.appendChild(buildEditItemRow(it)));
+  editMealModal.style.display = "flex";
+}
+
+function buildEditItemRow(item) {
+  const row = document.createElement("div");
+  row.className = "edit-item-row";
+  row.innerHTML = `
+    <label>Name</label>
+    <input type="text" class="edit-item-name" value="${escapeHtml(item?.name || "")}" placeholder="e.g. Grilled chicken" />
+    <label>Portion</label>
+    <input type="text" class="edit-item-portion" value="${escapeHtml(item?.portion_desc || "")}" placeholder="e.g. 1 cup" />
+    <div class="edit-item-macros-grid">
+      <div><label>Grams</label><input type="number" class="edit-item-grams" value="${item?.grams ?? ""}" min="0" /></div>
+      <div><label>Kcal</label><input type="number" class="edit-item-calories" value="${item?.calories ?? ""}" min="0" /></div>
+      <div><label>Protein g</label><input type="number" class="edit-item-protein" value="${item?.protein_g ?? ""}" min="0" /></div>
+      <div><label>Carbs g</label><input type="number" class="edit-item-carbs" value="${item?.carbs_g ?? ""}" min="0" /></div>
+      <div><label>Fat g</label><input type="number" class="edit-item-fat" value="${item?.fat_g ?? ""}" min="0" /></div>
+    </div>
+    <button type="button" class="edit-item-remove">Remove item</button>
+  `;
+  row.querySelector(".edit-item-remove").addEventListener("click", () => row.remove());
+  return row;
+}
+
+editMealAddItemBtn.addEventListener("click", () => {
+  editMealItemsContainer.appendChild(buildEditItemRow(null));
+});
+
+editMealSaveBtn.addEventListener("click", async () => {
+  editMealError.style.display = "none";
+  const description = editMealDescriptionInput.value.trim();
+  if (!description) {
+    editMealError.textContent = "Enter a description.";
+    editMealError.style.display = "block";
+    return;
+  }
+
+  const items = Array.from(editMealItemsContainer.querySelectorAll(".edit-item-row"))
+    .map((row) => ({
+      name: row.querySelector(".edit-item-name").value.trim(),
+      portion_desc: row.querySelector(".edit-item-portion").value.trim(),
+      grams: row.querySelector(".edit-item-grams").value,
+      calories: row.querySelector(".edit-item-calories").value,
+      protein_g: row.querySelector(".edit-item-protein").value,
+      carbs_g: row.querySelector(".edit-item-carbs").value,
+      fat_g: row.querySelector(".edit-item-fat").value,
+    }))
+    .filter((it) => it.name);
+
+  if (!items.length) {
+    editMealError.textContent = "Add at least one item with a name.";
+    editMealError.style.display = "block";
+    return;
+  }
+
+  setBusy(editMealSaveBtn, true, "Saving...");
+  try {
+    const res = await fetch(`/api/meals/${editingMealId}`, {
+      method: "PUT",
+      headers: profileHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ description, items }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to save changes.");
+    editMealModal.style.display = "none";
+    loadToday();
+    loadHistory();
+  } catch (err) {
+    editMealError.textContent = err.message;
+    editMealError.style.display = "block";
+  } finally {
+    setBusy(editMealSaveBtn, false, "Save Changes");
+  }
+});
 
 // --- Meal Plan tab ---
 const planDaysSelect = document.getElementById("plan-days");

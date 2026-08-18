@@ -223,6 +223,20 @@
     </div>
   </div>
 
+  <!-- EDIT MEAL MODAL -->
+  <div id="edit-meal-modal" class="modal-overlay" style="display:none">
+    <div class="modal-card">
+      <button id="edit-meal-modal-close" class="modal-close" type="button">&times;</button>
+      <h2>Edit Meal</h2>
+      <label for="edit-meal-description">Description</label>
+      <input type="text" id="edit-meal-description" placeholder="Short summary of the meal" />
+      <div id="edit-meal-items"></div>
+      <button id="edit-meal-add-item-btn" class="secondary-btn" type="button">+ Add Item</button>
+      <button id="edit-meal-save-btn" class="primary-btn" type="button">Save Changes</button>
+      <div id="edit-meal-error" class="flag over" style="display:none"></div>
+    </div>
+  </div>
+
   <!-- PRINT-ONLY VIEW (populated before window.print(), hidden on screen) -->
   <div id="print-view"></div>
 

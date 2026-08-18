@@ -196,6 +196,19 @@ async function deleteMeal(id, profileId) {
   await sql`DELETE FROM meals WHERE id = ${id} AND profile_id = ${profileId}`;
 }
 
+async function updateMeal(id, profileId, meal) {
+  await init();
+  const rows = await sql`
+    UPDATE meals
+    SET description = ${meal.description}, items_json = ${meal.items_json},
+        calories = ${meal.calories}, protein_g = ${meal.protein_g}, carbs_g = ${meal.carbs_g}, fat_g = ${meal.fat_g},
+        portion_flags_json = ${meal.portion_flags_json}
+    WHERE id = ${id} AND profile_id = ${profileId}
+    RETURNING *
+  `;
+  return rows[0] ? formatRow(rows[0]) : null;
+}
+
 function formatRow(row) {
   return {
     ...row,
@@ -322,6 +335,7 @@ module.exports = {
   listMealsForDate,
   listDates,
   deleteMeal,
+  updateMeal,
   createProfile,
   listProfiles,
   verifyProfilePin,

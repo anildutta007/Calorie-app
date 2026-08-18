@@ -9,6 +9,7 @@ const {
   listMealsForDate,
   listDates,
   deleteMeal,
+  updateMeal,
   createProfile,
   listProfiles,
   verifyProfilePin,
@@ -270,6 +271,56 @@ app.delete("/api/meals/:id", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || "Failed to delete meal." });
+  }
+});
+
+app.put("/api/meals/:id", async (req, res) => {
+  try {
+    const description = String(req.body.description || "").trim();
+    if (!description) return res.status(400).json({ error: "Description is required." });
+
+    const items = Array.isArray(req.body.items) ? req.body.items : [];
+    if (!items.length) return res.status(400).json({ error: "A meal needs at least one item." });
+
+    const cleanItems = items.map((it, i) => {
+      const name = String(it.name || "").trim();
+      if (!name) {
+        const err = new Error(`Item ${i + 1} needs a name.`);
+        err.status = 400;
+        throw err;
+      }
+      const num = (v) => {
+        const n = Number(v);
+        return Number.isFinite(n) && n >= 0 ? n : 0;
+      };
+      return {
+        name,
+        portion_desc: String(it.portion_desc || "").trim() || "1 serving",
+        grams: num(it.grams),
+        calories: num(it.calories),
+        protein_g: num(it.protein_g),
+        carbs_g: num(it.carbs_g),
+        fat_g: num(it.fat_g),
+      };
+    });
+
+    const total = sumTotals(cleanItems);
+    const flags = buildFlags(cleanItems);
+
+    const updated = await updateMeal(Number(req.params.id), req.profileId, {
+      description,
+      items_json: JSON.stringify(cleanItems),
+      calories: total.calories,
+      protein_g: total.protein_g,
+      carbs_g: total.carbs_g,
+      fat_g: total.fat_g,
+      portion_flags_json: JSON.stringify(flags),
+    });
+    if (!updated) return res.status(404).json({ error: "Meal not found." });
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message || "Failed to update meal." });
   }
 });
 

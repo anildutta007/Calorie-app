@@ -286,10 +286,26 @@ input[type="file"] {
   justify-content: space-between;
   align-items: baseline;
   margin-bottom: 6px;
+  gap: 8px;
 }
 
 .meal-card-header h3 { margin: 0; font-size: 0.95rem; }
 .meal-time { font-size: 0.75rem; color: var(--muted); }
+
+.meal-card-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.edit-btn {
+  background: none;
+  border: none;
+  color: var(--accent-dark);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 4px;
+}
 
 .delete-btn {
   background: none;
@@ -631,4 +647,33 @@ input[type="file"] {
   background: var(--accent);
   color: white;
   border-color: var(--accent);
+}
+
+/* --- Edit meal modal --- */
+
+.edit-item-row {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--bg);
+}
+
+.edit-item-row label {
+  margin-bottom: 2px;
+}
+
+.edit-item-macros-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0 8px;
+}
+
+.edit-item-remove {
+  background: none;
+  border: none;
+  color: var(--over);
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 4px 0 0;
 }
