@@ -733,6 +733,8 @@ function openEditMealModal(meal) {
   editMealModal.style.display = "flex";
 }
 
+// Only name/portion/grams are editable - calories/protein/carbs/fat are
+// always recalculated server-side from those, never hand-entered here.
 function buildEditItemRow(item) {
   const row = document.createElement("div");
   row.className = "edit-item-row";
@@ -741,13 +743,8 @@ function buildEditItemRow(item) {
     <input type="text" class="edit-item-name" value="${escapeHtml(item?.name || "")}" placeholder="e.g. Grilled chicken" />
     <label>Portion</label>
     <input type="text" class="edit-item-portion" value="${escapeHtml(item?.portion_desc || "")}" placeholder="e.g. 1 cup" />
-    <div class="edit-item-macros-grid">
-      <div><label>Grams</label><input type="number" class="edit-item-grams" value="${item?.grams ?? ""}" min="0" /></div>
-      <div><label>Kcal</label><input type="number" class="edit-item-calories" value="${item?.calories ?? ""}" min="0" /></div>
-      <div><label>Protein g</label><input type="number" class="edit-item-protein" value="${item?.protein_g ?? ""}" min="0" /></div>
-      <div><label>Carbs g</label><input type="number" class="edit-item-carbs" value="${item?.carbs_g ?? ""}" min="0" /></div>
-      <div><label>Fat g</label><input type="number" class="edit-item-fat" value="${item?.fat_g ?? ""}" min="0" /></div>
-    </div>
+    <label>Grams</label>
+    <input type="number" class="edit-item-grams" value="${item?.grams ?? ""}" min="0" />
     <button type="button" class="edit-item-remove">Remove item</button>
   `;
   row.querySelector(".edit-item-remove").addEventListener("click", () => row.remove());
@@ -772,10 +769,6 @@ editMealSaveBtn.addEventListener("click", async () => {
       name: row.querySelector(".edit-item-name").value.trim(),
       portion_desc: row.querySelector(".edit-item-portion").value.trim(),
       grams: row.querySelector(".edit-item-grams").value,
-      calories: row.querySelector(".edit-item-calories").value,
-      protein_g: row.querySelector(".edit-item-protein").value,
-      carbs_g: row.querySelector(".edit-item-carbs").value,
-      fat_g: row.querySelector(".edit-item-fat").value,
     }))
     .filter((it) => it.name);
 
@@ -785,7 +778,7 @@ editMealSaveBtn.addEventListener("click", async () => {
     return;
   }
 
-  setBusy(editMealSaveBtn, true, "Saving...");
+  setBusy(editMealSaveBtn, true, "Recalculating nutrition...");
   try {
     const res = await fetch(`/api/meals/${editingMealId}`, {
       method: "PUT",

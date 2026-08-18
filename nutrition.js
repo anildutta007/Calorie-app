@@ -111,4 +111,74 @@ function extractNutritionResult(msg) {
   return extractToolResult(msg, "log_nutrition");
 }
 
-module.exports = { analyzeMealText, analyzeMealPhoto, getClient, extractToolResult };
+const ESTIMATE_MACROS_TOOL = {
+  name: "estimate_macros",
+  description: "Record estimated nutrition for a list of food items given their name, portion, and weight.",
+  input_schema: {
+    type: "object",
+    properties: {
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Exact item name, copied verbatim from the input list." },
+            calories: { type: "number" },
+            protein_g: { type: "number" },
+            carbs_g: { type: "number" },
+            fat_g: { type: "number" },
+          },
+          required: ["name", "calories", "protein_g", "carbs_g", "fat_g"],
+        },
+      },
+    },
+    required: ["items"],
+  },
+};
+
+const ESTIMATE_MACROS_SYSTEM_PROMPT = `You are a careful nutrition estimation assistant embedded in a personal
+calorie tracking app. You will be given a list of food items, each with a name, a portion description, and a weight
+in grams that the person has already decided on. Trust the given grams as the exact portion size - do not reinterpret
+or second-guess it from the portion description. For each item, estimate calories, protein, carbohydrates, and fat
+using standard nutrition knowledge (USDA-style values per 100g scaled to the given weight). Use the exact item name
+given, copied verbatim, so it can be matched back up. Always call the estimate_macros tool with one entry per item
+given - do not skip any. Be a reasonable, realistic estimator - don't refuse due to uncertainty.`;
+
+// Recomputes calories/protein/carbs/fat for a list of {name, portion_desc, grams}
+// items - used when a person edits a logged meal's name/portion/grams and the
+// macros need to be recalculated rather than hand-entered.
+async function estimateItemMacros(items) {
+  const anthropic = getClient();
+  const msg = await anthropic.messages.create({
+    model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
+    max_tokens: 2000,
+    system: ESTIMATE_MACROS_SYSTEM_PROMPT,
+    tools: [ESTIMATE_MACROS_TOOL],
+    tool_choice: { type: "tool", name: "estimate_macros" },
+    messages: [
+      {
+        role: "user",
+        content: `Estimate nutrition for these items:\n${items
+          .map((it) => `- ${it.name}, ${it.portion_desc || "1 serving"}, ${it.grams}g`)
+          .join("\n")}`,
+      },
+    ],
+  });
+  const result = extractToolResult(msg, "estimate_macros").items || [];
+
+  const byNormalizedName = new Map(result.map((r) => [String(r.name || "").trim().toLowerCase(), r]));
+  return items.map((it) => {
+    const est = byNormalizedName.get(it.name.trim().toLowerCase());
+    return {
+      name: it.name,
+      portion_desc: it.portion_desc,
+      grams: it.grams,
+      calories: est?.calories ?? 0,
+      protein_g: est?.protein_g ?? 0,
+      carbs_g: est?.carbs_g ?? 0,
+      fat_g: est?.fat_g ?? 0,
+    };
+  });
+}
+
+module.exports = { analyzeMealText, analyzeMealPhoto, getClient, extractToolResult, estimateItemMacros };

@@ -21,7 +21,7 @@ const {
   getProfileBio,
   setProfileBio,
 } = require("./db");
-const { analyzeMealText, analyzeMealPhoto } = require("./nutrition");
+const { analyzeMealText, analyzeMealPhoto, estimateItemMacros } = require("./nutrition");
 const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mealplan");
 const { buildRecipePack } = require("./recipes");
 const { calculateTargets, ACTIVITY_MULTIPLIERS } = require("./nutritionCalc");
@@ -274,6 +274,8 @@ app.delete("/api/meals/:id", async (req, res) => {
   }
 });
 
+// Users can only edit name/portion/grams per item - calories/protein/carbs/fat
+// are always recalculated here from those, never taken from the client.
 app.put("/api/meals/:id", async (req, res) => {
   try {
     const description = String(req.body.description || "").trim();
@@ -289,27 +291,26 @@ app.put("/api/meals/:id", async (req, res) => {
         err.status = 400;
         throw err;
       }
-      const num = (v) => {
-        const n = Number(v);
-        return Number.isFinite(n) && n >= 0 ? n : 0;
-      };
+      const grams = Number(it.grams);
+      if (!Number.isFinite(grams) || grams <= 0) {
+        const err = new Error(`Item ${i + 1} (${name}) needs a weight in grams greater than 0.`);
+        err.status = 400;
+        throw err;
+      }
       return {
         name,
         portion_desc: String(it.portion_desc || "").trim() || "1 serving",
-        grams: num(it.grams),
-        calories: num(it.calories),
-        protein_g: num(it.protein_g),
-        carbs_g: num(it.carbs_g),
-        fat_g: num(it.fat_g),
+        grams,
       };
     });
 
-    const total = sumTotals(cleanItems);
-    const flags = buildFlags(cleanItems);
+    const estimatedItems = await estimateItemMacros(cleanItems);
+    const total = sumTotals(estimatedItems);
+    const flags = buildFlags(estimatedItems);
 
     const updated = await updateMeal(Number(req.params.id), req.profileId, {
       description,
-      items_json: JSON.stringify(cleanItems),
+      items_json: JSON.stringify(estimatedItems),
       calories: total.calories,
       protein_g: total.protein_g,
       carbs_g: total.carbs_g,
