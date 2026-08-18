@@ -971,9 +971,19 @@ function resetMealPlanUI() {
 
 function applyMealPlan(mealPlan) {
   planDaysSelect.value = String(Math.min(Math.max(mealPlan.days.length || 7, 1), 7));
-  planCaloriesInput.value = mealPlan.calorie_target;
-  planProteinInput.value = mealPlan.protein_target;
-  planTargetHint.style.display = "none"; // showing this plan's own saved target, not the daily target
+  // Always prefill the form from the current daily target so new generations
+  // use the latest target.  Only fall back to the plan's own stored targets
+  // if no daily target has been set yet.
+  if (currentTargets && currentTargets.calories) {
+    planCaloriesInput.value = currentTargets.calories;
+    planProteinInput.value = currentTargets.protein_g ?? mealPlan.protein_target;
+    planTargetHint.textContent = "Prefilled from your Daily Target — edit below, or change it on the Target tab.";
+    planTargetHint.style.display = "block";
+  } else {
+    planCaloriesInput.value = mealPlan.calorie_target;
+    planProteinInput.value = mealPlan.protein_target;
+    planTargetHint.style.display = "none";
+  }
   dietButtons.forEach((b) => b.classList.toggle("active", b.dataset.diet === mealPlan.diet));
   selectedDiet = mealPlan.diet;
   showDietOptions(selectedDiet);
