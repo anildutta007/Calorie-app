@@ -651,14 +651,16 @@ function renderMealList(container, meals) {
   }
   container.innerHTML = meals
     .map((m) => {
-      const time = new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const loggedAt = new Date(m.created_at);
+      const dateStr = loggedAt.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+      const timeStr = loggedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       return `
       <div class="meal-card">
         <div class="meal-card-header">
           <h3>${escapeHtml(m.description)}</h3>
           <button class="delete-btn" data-id="${m.id}">Delete</button>
         </div>
-        <div class="meal-time">${time} · ${m.source}</div>
+        <div class="meal-time">${dateStr} · ${timeStr} · ${m.source}</div>
         ${renderItems(m.items)}
         <div class="totals-grid" style="margin-top:8px">
           ${statBlock(Math.round(m.calories), "kcal")}
