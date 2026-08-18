@@ -188,6 +188,7 @@ tabButtons.forEach((btn) => {
       loadBio();
       loadTargets();
     }
+    if (btn.dataset.tab === "progress") loadProgress();
   });
 });
 
@@ -1185,6 +1186,153 @@ function renderPrintItem(item, recipe) {
       ${ingredientsHtml}
       ${stepsHtml}
     </div>
+  `;
+}
+
+// --- Progress tab (7-day performance charts) ---
+
+async function loadProgress() {
+  const container = document.getElementById("tab-progress");
+  container.innerHTML = `<div class="empty-state">Loading your progress...</div>`;
+  try {
+    const res = await fetch("/api/progress?days=7", { headers: profileHeaders() });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to load progress.");
+    renderProgress(data.days || []);
+  } catch (err) {
+    document.getElementById("tab-progress").innerHTML = `<div class="flag over">⚠️ ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+// Build a local-timezone Date from a "YYYY-MM-DD" string so toLocaleDateString
+// gives the correct weekday (using new Date("YYYY-MM-DD") parses as UTC noon,
+// which flips the weekday in timezones west of UTC at midnight).
+function parseDateLocal(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function renderProgress(dayRows) {
+  const container = document.getElementById("tab-progress");
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+
+  // Build the last-7-days window ending today
+  const dates = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+
+  // Map date → aggregate row from the server
+  const byDate = {};
+  (dayRows || []).forEach((r) => (byDate[r.date] = r));
+
+  // Fill all 7 slots, defaulting missing days to 0
+  const week = dates.map((date) => {
+    const row = byDate[date] || {};
+    return {
+      date,
+      dayLabel: parseDateLocal(date).toLocaleDateString([], { weekday: "short" }),
+      calories: Number(row.calories) || 0,
+      protein_g: Number(row.protein_g) || 0,
+      carbs_g: Number(row.carbs_g) || 0,
+      fat_g: Number(row.fat_g) || 0,
+      fiber_g: Number(row.fiber_g) || 0,
+      sugar_g: Number(row.sugar_g) || 0,
+      sodium_mg: Number(row.sodium_mg) || 0,
+      saturated_fat_g: Number(row.saturated_fat_g) || 0,
+      hasData: Boolean(byDate[date]),
+    };
+  });
+
+  const loggedDays = week.filter((d) => d.hasData);
+  const loggedCount = loggedDays.length;
+
+  function avg(field) {
+    if (!loggedCount) return 0;
+    return loggedDays.reduce((s, d) => s + d[field], 0) / loggedCount;
+  }
+
+  // Compact label for bar tops: ≥1000 shown as "1.5k" to fit narrow columns
+  function fmtBarVal(val, key) {
+    if (!val) return "—";
+    if (key === "calories" || key === "sodium_mg") {
+      return val >= 1000 ? `${(val / 1000).toFixed(1)}k` : String(Math.round(val));
+    }
+    return String(round1(val));
+  }
+
+  const metrics = [
+    { key: "calories",  label: "Calories", unit: " cal", mode: "ceiling", target: currentTargets?.calories },
+    { key: "protein_g", label: "Protein",  unit: "g",    mode: "floor",   target: currentTargets?.protein_g },
+    { key: "carbs_g",   label: "Carbs",    unit: "g",    mode: "ceiling", target: currentTargets?.carbs_g },
+    { key: "fat_g",     label: "Fat",      unit: "g",    mode: "ceiling", target: currentTargets?.fat_g },
+  ];
+
+  function chartHtml(metric) {
+    const values = week.map((d) => d[metric.key]);
+    // Max bar height = target (if set) or highest recorded value, minimum 1 to avoid divide-by-zero
+    const maxVal = Math.max(metric.target || 0, ...values, 1);
+    const avgVal = avg(metric.key);
+    const avgStr = metric.key === "calories" ? Math.round(avgVal) : round1(avgVal);
+
+    const barsHtml = week
+      .map((d) => {
+        const val = d[metric.key];
+        // At least 2% height so a tiny value still shows as a sliver; 0 shows nothing
+        const pct = d.hasData && val > 0 ? Math.max(Math.round((val / maxVal) * 100), 2) : 0;
+        const status = d.hasData && val > 0 ? (macroStatus(val, metric.target, metric.mode) || "good") : "empty";
+        const isToday = d.date === todayStr;
+        return `
+          <div class="prog-bar-col">
+            <div class="prog-bar-val${!d.hasData || val === 0 ? " prog-bar-val-empty" : ""}">${d.hasData ? fmtBarVal(val, metric.key) : "—"}</div>
+            <div class="prog-bar-wrap">
+              <div class="prog-bar prog-bar-${status}" style="height:${pct}%"></div>
+            </div>
+            <div class="prog-bar-day${isToday ? " prog-bar-day-today" : ""}">${d.dayLabel}</div>
+          </div>`;
+      })
+      .join("");
+
+    return `
+      <div class="card">
+        <div class="prog-chart-header">
+          <div class="prog-chart-title">${metric.label}</div>
+          ${loggedCount ? `<div class="muted">${avgStr}${metric.unit} avg · ${loggedCount}d</div>` : ""}
+        </div>
+        <div class="prog-bars">${barsHtml}</div>
+      </div>`;
+  }
+
+  // Nutrient summary — only shown once meals with the new nutrient data exist
+  const avgFiber  = avg("fiber_g");
+  const avgSugar  = avg("sugar_g");
+  const avgSodium = avg("sodium_mg");
+  const avgSatFat = avg("saturated_fat_g");
+  const hasNutrients = avgFiber > 0 || avgSugar > 0 || avgSodium > 0 || avgSatFat > 0;
+
+  const nutrientsHtml = hasNutrients
+    ? `<div class="card">
+        <h2>Avg Daily Nutrients</h2>
+        <div class="muted" style="margin-bottom:12px">Averaged over ${loggedCount} logged day${loggedCount === 1 ? "" : "s"}</div>
+        <div class="nutrients-grid">
+          <div class="nutrient-cell"><div class="nutrient-val">${round1(avgFiber)}g</div><div class="nutrient-label">Fiber</div></div>
+          <div class="nutrient-cell"><div class="nutrient-val">${round1(avgSugar)}g</div><div class="nutrient-label">Sugar</div></div>
+          <div class="nutrient-cell"><div class="nutrient-val">${Math.round(avgSodium)}mg</div><div class="nutrient-label">Sodium</div></div>
+          <div class="nutrient-cell"><div class="nutrient-val">${round1(avgSatFat)}g</div><div class="nutrient-label">Sat. Fat</div></div>
+        </div>
+      </div>`
+    : "";
+
+  container.innerHTML = `
+    <div class="card">
+      <h2>📈 Last 7 Days</h2>
+      <div class="muted">${loggedCount} of 7 days logged${loggedCount === 0 ? " — start logging meals to see your progress!" : ""}</div>
+    </div>
+    ${metrics.map(chartHtml).join("")}
+    ${nutrientsHtml}
   `;
 }
 

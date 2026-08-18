@@ -30,8 +30,12 @@ const NUTRITION_TOOL = {
             protein_g: { type: "number" },
             carbs_g: { type: "number" },
             fat_g: { type: "number" },
+            fiber_g: { type: "number", description: "Dietary fiber in grams." },
+            sugar_g: { type: "number", description: "Total sugars in grams." },
+            sodium_mg: { type: "number", description: "Sodium in milligrams." },
+            saturated_fat_g: { type: "number", description: "Saturated fat in grams." },
           },
-          required: ["name", "portion_desc", "grams", "calories", "protein_g", "carbs_g", "fat_g"],
+          required: ["name", "portion_desc", "grams", "calories", "protein_g", "carbs_g", "fat_g", "fiber_g", "sugar_g", "sodium_mg", "saturated_fat_g"],
         },
       },
       total: {
@@ -52,7 +56,8 @@ const NUTRITION_TOOL = {
 const SYSTEM_PROMPT = `You are a careful nutrition estimation assistant embedded in a personal calorie tracking app.
 Given a description of a meal (from speech or typed text) or a photo of a plate, identify each distinct food item,
 estimate its portion size in grams as best you can (use visual cues like plate size, utensils, or stated quantities),
-and estimate calories, protein, carbohydrates, and fat for each item using standard nutrition knowledge (USDA-style values).
+and estimate calories, protein, carbohydrates, fat, dietary fiber, total sugars, sodium (in mg), and saturated fat
+for each item using standard nutrition knowledge (USDA-style values).
 Always call the log_nutrition tool with your answer. Be a reasonable, realistic estimator - don't refuse due to uncertainty,
 just give your best estimate and keep portions realistic. Sum item values into an accurate total.`;
 
@@ -127,8 +132,12 @@ const ESTIMATE_MACROS_TOOL = {
             protein_g: { type: "number" },
             carbs_g: { type: "number" },
             fat_g: { type: "number" },
+            fiber_g: { type: "number", description: "Dietary fiber in grams." },
+            sugar_g: { type: "number", description: "Total sugars in grams." },
+            sodium_mg: { type: "number", description: "Sodium in milligrams." },
+            saturated_fat_g: { type: "number", description: "Saturated fat in grams." },
           },
-          required: ["name", "calories", "protein_g", "carbs_g", "fat_g"],
+          required: ["name", "calories", "protein_g", "carbs_g", "fat_g", "fiber_g", "sugar_g", "sodium_mg", "saturated_fat_g"],
         },
       },
     },
@@ -140,9 +149,10 @@ const ESTIMATE_MACROS_SYSTEM_PROMPT = `You are a careful nutrition estimation as
 calorie tracking app. You will be given a numbered list of food items, each with a name, a portion description, and a
 weight in grams that the person has already decided on. Trust the given grams as the exact portion size - do not
 reinterpret or second-guess it from the portion description. For each item, estimate calories, protein, carbohydrates,
-and fat using standard nutrition knowledge (USDA-style values per 100g scaled to the given weight). Always call the
-estimate_macros tool with exactly one entry per item, in the SAME ORDER as given (item 1 first, item 2 second, etc.) -
-do not skip, merge, or reorder any. Be a reasonable, realistic estimator - don't refuse due to uncertainty.`;
+fat, dietary fiber, total sugars, sodium (in mg), and saturated fat using standard nutrition knowledge (USDA-style
+values per 100g scaled to the given weight). Always call the estimate_macros tool with exactly one entry per item, in
+the SAME ORDER as given (item 1 first, item 2 second, etc.) - do not skip, merge, or reorder any. Be a reasonable,
+realistic estimator - don't refuse due to uncertainty.`;
 
 // Recomputes calories/protein/carbs/fat for a list of {name, portion_desc, grams}
 // items - used when a person edits a logged meal's name/portion/grams and the
@@ -187,6 +197,10 @@ async function estimateItemMacros(items) {
       protein_g: est?.protein_g ?? 0,
       carbs_g: est?.carbs_g ?? 0,
       fat_g: est?.fat_g ?? 0,
+      fiber_g: est?.fiber_g ?? 0,
+      sugar_g: est?.sugar_g ?? 0,
+      sodium_mg: est?.sodium_mg ?? 0,
+      saturated_fat_g: est?.saturated_fat_g ?? 0,
     };
   });
 }

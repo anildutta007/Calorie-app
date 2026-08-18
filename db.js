@@ -89,6 +89,13 @@ async function init() {
       await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio_weight_kg REAL`;
       await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio_height_cm REAL`;
       await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio_activity TEXT`; // sedentary|light|moderate|active|very_active
+
+      // Extended nutrient tracking: fiber, sugar, sodium, saturated fat.
+      // Added after initial launch - existing meals default to 0 for these columns.
+      await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS fiber_g REAL DEFAULT 0`;
+      await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS sugar_g REAL DEFAULT 0`;
+      await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS sodium_mg REAL DEFAULT 0`;
+      await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS saturated_fat_g REAL DEFAULT 0`;
     })();
   }
   return initialized;
@@ -166,8 +173,8 @@ function badRequest(message) {
 async function insertMeal(meal) {
   await init();
   const rows = await sql`
-    INSERT INTO meals (created_at, date, source, raw_input, description, items_json, calories, protein_g, carbs_g, fat_g, portion_flags_json, profile_id)
-    VALUES (${meal.created_at}, ${meal.date}, ${meal.source}, ${meal.raw_input}, ${meal.description}, ${meal.items_json}, ${meal.calories}, ${meal.protein_g}, ${meal.carbs_g}, ${meal.fat_g}, ${meal.portion_flags_json}, ${meal.profile_id})
+    INSERT INTO meals (created_at, date, source, raw_input, description, items_json, calories, protein_g, carbs_g, fat_g, fiber_g, sugar_g, sodium_mg, saturated_fat_g, portion_flags_json, profile_id)
+    VALUES (${meal.created_at}, ${meal.date}, ${meal.source}, ${meal.raw_input}, ${meal.description}, ${meal.items_json}, ${meal.calories}, ${meal.protein_g}, ${meal.carbs_g}, ${meal.fat_g}, ${meal.fiber_g || 0}, ${meal.sugar_g || 0}, ${meal.sodium_mg || 0}, ${meal.saturated_fat_g || 0}, ${meal.portion_flags_json}, ${meal.profile_id})
     RETURNING *
   `;
   return formatRow(rows[0]);
@@ -202,6 +209,7 @@ async function updateMeal(id, profileId, meal) {
     UPDATE meals
     SET description = ${meal.description}, items_json = ${meal.items_json},
         calories = ${meal.calories}, protein_g = ${meal.protein_g}, carbs_g = ${meal.carbs_g}, fat_g = ${meal.fat_g},
+        fiber_g = ${meal.fiber_g || 0}, sugar_g = ${meal.sugar_g || 0}, sodium_mg = ${meal.sodium_mg || 0}, saturated_fat_g = ${meal.saturated_fat_g || 0},
         portion_flags_json = ${meal.portion_flags_json}
     WHERE id = ${id} AND profile_id = ${profileId}
     RETURNING *
@@ -329,6 +337,33 @@ async function setProfileBio(profileId, bio) {
   return formatBio(rows[0]);
 }
 
+// --- Progress summary (last N days of aggregated totals per day) ---
+
+async function getProgressSummary(profileId, days) {
+  await init();
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - (days - 1));
+  const cutoffDate = cutoff.toISOString().slice(0, 10);
+
+  const rows = await sql`
+    SELECT
+      date,
+      SUM(calories)::real            AS calories,
+      SUM(protein_g)::real           AS protein_g,
+      SUM(carbs_g)::real             AS carbs_g,
+      SUM(fat_g)::real               AS fat_g,
+      SUM(fiber_g)::real             AS fiber_g,
+      SUM(sugar_g)::real             AS sugar_g,
+      SUM(sodium_mg)::real           AS sodium_mg,
+      SUM(saturated_fat_g)::real     AS saturated_fat_g
+    FROM meals
+    WHERE profile_id = ${profileId} AND date >= ${cutoffDate}
+    GROUP BY date
+    ORDER BY date ASC
+  `;
+  return rows;
+}
+
 module.exports = {
   insertMeal,
   getMeal,
@@ -346,4 +381,5 @@ module.exports = {
   setProfileTargets,
   getProfileBio,
   setProfileBio,
+  getProgressSummary,
 };

@@ -20,6 +20,7 @@ const {
   setProfileTargets,
   getProfileBio,
   setProfileBio,
+  getProgressSummary,
 } = require("./db");
 const { analyzeMealText, analyzeMealPhoto, estimateItemMacros } = require("./nutrition");
 const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mealplan");
@@ -51,6 +52,7 @@ app.use("/api/meals", requireProfile);
 app.use("/api/dates", requireProfile);
 app.use("/api/meal-plan", requireProfile);
 app.use("/api/profile", requireProfile);
+app.use("/api/progress", requireProfile);
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD (server local/UTC date)
@@ -69,14 +71,20 @@ function sumTotals(items) {
       protein_g: acc.protein_g + (it.protein_g || 0),
       carbs_g: acc.carbs_g + (it.carbs_g || 0),
       fat_g: acc.fat_g + (it.fat_g || 0),
+      fiber_g: acc.fiber_g + (it.fiber_g || 0),
+      sugar_g: acc.sugar_g + (it.sugar_g || 0),
+      sodium_mg: acc.sodium_mg + (it.sodium_mg || 0),
+      saturated_fat_g: acc.saturated_fat_g + (it.saturated_fat_g || 0),
     }),
-    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0, sugar_g: 0, sodium_mg: 0, saturated_fat_g: 0 }
   );
 }
 
 async function saveMealFromAnalysis(analysis, source, rawInput, profileId) {
   const items = analysis.items || [];
-  const total = analysis.total || sumTotals(items);
+  // Always compute totals from items so nutrient fields are included (Claude's
+  // tool response "total" only covers the 4 main macros, not fiber/sugar/etc).
+  const total = sumTotals(items);
   const flags = buildFlags(items);
   const date = todayDate();
 
@@ -91,6 +99,10 @@ async function saveMealFromAnalysis(analysis, source, rawInput, profileId) {
     protein_g: total.protein_g,
     carbs_g: total.carbs_g,
     fat_g: total.fat_g,
+    fiber_g: total.fiber_g,
+    sugar_g: total.sugar_g,
+    sodium_mg: total.sodium_mg,
+    saturated_fat_g: total.saturated_fat_g,
     portion_flags_json: JSON.stringify(flags),
     profile_id: profileId,
   });
@@ -315,6 +327,10 @@ app.put("/api/meals/:id", async (req, res) => {
       protein_g: total.protein_g,
       carbs_g: total.carbs_g,
       fat_g: total.fat_g,
+      fiber_g: total.fiber_g,
+      sugar_g: total.sugar_g,
+      sodium_mg: total.sodium_mg,
+      saturated_fat_g: total.saturated_fat_g,
       portion_flags_json: JSON.stringify(flags),
     });
     if (!updated) return res.status(404).json({ error: "Meal not found." });
@@ -389,6 +405,19 @@ app.post("/api/meal-plan/recipes", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(err.status || 500).json({ error: err.message || "Failed to generate recipes." });
+  }
+});
+
+// --- Progress (7-day summary, requires X-Profile-Id) ---
+
+app.get("/api/progress", async (req, res) => {
+  try {
+    const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 30);
+    const rows = await getProgressSummary(req.profileId, days);
+    res.json({ days: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to load progress." });
   }
 });
 

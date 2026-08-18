@@ -774,3 +774,106 @@ input[type="file"] {
   cursor: pointer;
   padding: 4px 0 0;
 }
+
+/* --- Progress tab --- */
+
+.prog-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.prog-chart-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* 7 equal columns for the 7 daily bars */
+.prog-bars {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+
+.prog-bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Value label above each bar */
+.prog-bar-val {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: center;
+  min-height: 14px;
+  line-height: 1.2;
+  word-break: break-all;
+}
+
+.prog-bar-val-empty {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* Fixed-height slot — bar grows upward from the bottom */
+.prog-bar-wrap {
+  width: 100%;
+  height: 80px;
+  display: flex;
+  align-items: flex-end;
+  background: var(--bg);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.prog-bar {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  transition: height 0.4s ease;
+}
+
+.prog-bar.prog-bar-empty   { background: transparent; height: 0; }
+.prog-bar.prog-bar-good    { background: var(--accent); }
+.prog-bar.prog-bar-warn    { background: var(--warn); }
+.prog-bar.prog-bar-bad     { background: var(--over); }
+
+/* Weekday label below each bar */
+.prog-bar-day {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-align: center;
+  font-weight: 500;
+}
+
+.prog-bar-day-today {
+  color: var(--accent-dark);
+  font-weight: 700;
+}
+
+/* Nutrient summary grid */
+.nutrients-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  text-align: center;
+}
+
+.nutrient-val {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.nutrient-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-top: 3px;
+}
