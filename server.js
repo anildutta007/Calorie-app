@@ -27,6 +27,7 @@ const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mea
 const { buildRecipePack } = require("./recipes");
 const { calculateTargets, ACTIVITY_MULTIPLIERS } = require("./nutritionCalc");
 const { flagPortion } = require("./portions");
+const { calcIdealWeight, calcBmi, bmiCategory, calcWeightLossTargets, generateExercisePlan } = require("./weightGoal");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -53,6 +54,7 @@ app.use("/api/dates", requireProfile);
 app.use("/api/meal-plan", requireProfile);
 app.use("/api/profile", requireProfile);
 app.use("/api/progress", requireProfile);
+app.use("/api/weight-goal", requireProfile);
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD (server local/UTC date)
@@ -405,6 +407,77 @@ app.post("/api/meal-plan/recipes", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(err.status || 500).json({ error: err.message || "Failed to generate recipes." });
+  }
+});
+
+// --- Weight goal (ideal weight, deficit targets, exercise plan) ---
+
+// Calculate ideal weight and weight-loss targets from the profile's saved bio.
+// Responds with the full assessment so the client can render it without extra
+// round-trips; the exercise plan is fetched separately (it's slow, on demand).
+app.get("/api/weight-goal", async (req, res) => {
+  try {
+    const bio = await getProfileBio(req.profileId);
+    if (!bio || !bio.weight_kg || !bio.height_cm || !bio.age || !bio.sex) {
+      return res.status(400).json({ needsBio: true, error: "Please fill in your age, sex, weight and height on the 🎯 Target tab first." });
+    }
+
+    const bmi     = calcBmi(bio.weight_kg, bio.height_cm);
+    const ideal   = calcIdealWeight(bio.height_cm);
+    const category = bmiCategory(bmi);
+
+    // "Overweight" starts at BMI 25; use the upper healthy boundary (BMI 24.9)
+    // as the threshold — if current weight ≤ upper_kg the person is in range.
+    const weightToLose = Math.max(0, Math.round((bio.weight_kg - ideal.upper_kg) * 10) / 10);
+    const isUnderweight = bio.weight_kg < ideal.lower_kg;
+    const atIdeal       = !isUnderweight && weightToLose === 0;
+
+    const result = {
+      bmi,
+      bmi_category:    category,
+      current_weight_kg: bio.weight_kg,
+      height_cm:       bio.height_cm,
+      age:             bio.age,
+      sex:             bio.sex,
+      activity:        bio.activity,
+      ideal_weight_kg: ideal.ideal_kg,
+      ideal_range:     { lower: ideal.lower_kg, upper: ideal.upper_kg },
+      weight_to_lose_kg: weightToLose,
+      at_ideal_weight: atIdeal,
+      is_underweight:  isUnderweight,
+      // Weeks at 0.5 kg/week (safe, sustainable rate)
+      estimated_weeks: weightToLose > 0 ? Math.ceil(weightToLose / 0.5) : 0,
+    };
+
+    if (weightToLose > 0) {
+      result.loss_targets = calcWeightLossTargets(bio);
+    }
+
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message || "Failed to calculate weight goal." });
+  }
+});
+
+// Generate a personalised exercise plan via Claude (slow — client calls on demand).
+app.post("/api/weight-goal/exercises", async (req, res) => {
+  try {
+    const { weight_to_lose_kg, age, activity, sex, bmi } = req.body;
+    if (!age || !activity || !sex || bmi == null) {
+      return res.status(400).json({ error: "Missing required details." });
+    }
+    const plan = await generateExercisePlan({
+      weightToLose_kg: Number(weight_to_lose_kg) || 0,
+      age:    Number(age),
+      activity,
+      sex,
+      bmi:    Number(bmi),
+    });
+    res.json({ plan });
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message || "Failed to generate exercise plan." });
   }
 });
 

@@ -189,6 +189,7 @@ tabButtons.forEach((btn) => {
       loadTargets();
     }
     if (btn.dataset.tab === "progress") loadProgress();
+    if (btn.dataset.tab === "goal") loadWeightGoal();
   });
 });
 
@@ -1186,6 +1187,306 @@ function renderPrintItem(item, recipe) {
       ${ingredientsHtml}
       ${stepsHtml}
     </div>
+  `;
+}
+
+// --- Weight Goal tab ---
+
+// Sex toggle state for the weight-goal inline form (separate from Target tab's)
+let wgSelectedSex = "male";
+
+async function loadWeightGoal() {
+  const container = document.getElementById("tab-goal");
+
+  // Ensure bio is in memory (enterApp() loads it but may not have awaited yet)
+  if (!currentBio) await loadBio();
+
+  // If bio is incomplete, show the inline bio form so the user can fill it in
+  const bioOk = currentBio && currentBio.weight_kg && currentBio.height_cm && currentBio.age && currentBio.sex;
+  if (!bioOk) {
+    renderWeightGoalForm(container, currentBio || {});
+    return;
+  }
+
+  container.innerHTML = `<div class="empty-state">Calculating your ideal weight...</div>`;
+  try {
+    const res = await fetch("/api/weight-goal", { headers: profileHeaders() });
+    const data = await res.json();
+    if (!res.ok) {
+      if (data.needsBio) { renderWeightGoalForm(container, currentBio || {}); return; }
+      throw new Error(data.error || "Failed to load assessment.");
+    }
+    renderWeightGoalResult(container, data);
+  } catch (err) {
+    container.innerHTML = `<div class="flag over">⚠️ ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+// Inline bio form shown when the profile has no saved bio yet
+function renderWeightGoalForm(container, bio) {
+  wgSelectedSex = bio.sex || "male";
+  container.innerHTML = `
+    <div class="card">
+      <h2>⚖️ Find Your Ideal Weight</h2>
+      <p class="muted" style="margin-bottom:14px">Enter your details — we'll calculate your ideal weight and build a personalised weight-loss plan.</p>
+      <label for="wg-age">Age</label>
+      <input type="number" id="wg-age" placeholder="e.g. 35" min="2" max="120" value="${escapeHtml(String(bio.age || ""))}" />
+      <label>Sex</label>
+      <div class="diet-toggle">
+        <button type="button" class="sex-btn wg-sex-btn${wgSelectedSex === "male" ? " active" : ""}" data-sex="male">Male</button>
+        <button type="button" class="sex-btn wg-sex-btn${wgSelectedSex === "female" ? " active" : ""}" data-sex="female">Female</button>
+      </div>
+      <label for="wg-weight">Current weight (kg)</label>
+      <input type="number" id="wg-weight" placeholder="e.g. 75" min="10" max="300" value="${escapeHtml(String(bio.weight_kg || ""))}" />
+      <label for="wg-height">Height (cm)</label>
+      <input type="number" id="wg-height" placeholder="e.g. 170" min="50" max="250" value="${escapeHtml(String(bio.height_cm || ""))}" />
+      <label for="wg-activity">Activity level</label>
+      <select id="wg-activity">
+        <option value="sedentary"  ${(bio.activity === "sedentary")  ? "selected" : ""}>Sedentary (little/no exercise)</option>
+        <option value="light"      ${(!bio.activity || bio.activity === "light") ? "selected" : ""}>Lightly active (1-3 days/week)</option>
+        <option value="moderate"   ${(bio.activity === "moderate")   ? "selected" : ""}>Moderately active (3-5 days/week)</option>
+        <option value="active"     ${(bio.activity === "active")     ? "selected" : ""}>Very active (6-7 days/week)</option>
+        <option value="very_active"${(bio.activity === "very_active") ? "selected" : ""}>Extremely active (physical job + training)</option>
+      </select>
+      <button id="wg-calc-btn" class="primary-btn" type="button">Calculate My Ideal Weight</button>
+      <div id="wg-form-error" class="flag over" style="display:none"></div>
+    </div>`;
+
+  // Sex toggle
+  container.querySelectorAll(".wg-sex-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      container.querySelectorAll(".wg-sex-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      wgSelectedSex = btn.dataset.sex;
+    });
+  });
+
+  // Submit — saves bio via existing endpoint, then fetches weight-goal
+  container.querySelector("#wg-calc-btn").addEventListener("click", async () => {
+    const errEl = container.querySelector("#wg-form-error");
+    errEl.style.display = "none";
+    const age = Number(container.querySelector("#wg-age").value);
+    const weight_kg = Number(container.querySelector("#wg-weight").value);
+    const height_cm = Number(container.querySelector("#wg-height").value);
+    const activity = container.querySelector("#wg-activity").value;
+
+    if (!age || age < 2 || age > 120)            { errEl.textContent = "Enter a valid age (2-120)."; errEl.style.display = "block"; return; }
+    if (!weight_kg || weight_kg < 10 || weight_kg > 300) { errEl.textContent = "Enter a valid weight (10-300 kg)."; errEl.style.display = "block"; return; }
+    if (!height_cm || height_cm < 50 || height_cm > 250) { errEl.textContent = "Enter a valid height (50-250 cm)."; errEl.style.display = "block"; return; }
+
+    const calcBtn = container.querySelector("#wg-calc-btn");
+    setBusy(calcBtn, true, "Calculating...");
+    try {
+      // Save bio (reuses the Target tab's bio-save endpoint)
+      const bioRes = await fetch("/api/profile/targets/calculate", {
+        method: "POST",
+        headers: profileHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ age, sex: wgSelectedSex, weight_kg, height_cm, activity }),
+      });
+      if (!bioRes.ok) {
+        const d = await bioRes.json();
+        throw new Error(d.error || "Failed to save details.");
+      }
+      // Keep currentBio in sync
+      currentBio = { age, sex: wgSelectedSex, weight_kg, height_cm, activity };
+
+      // Now fetch the weight goal assessment
+      container.innerHTML = `<div class="empty-state">Calculating your ideal weight...</div>`;
+      const res = await fetch("/api/weight-goal", { headers: profileHeaders() });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load assessment.");
+      renderWeightGoalResult(container, data);
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = "block";
+      setBusy(calcBtn, false, "Calculate My Ideal Weight");
+    }
+  });
+}
+
+const BMI_BADGE_CLASS = { "Underweight": "bmi-under", "Normal weight": "bmi-normal", "Overweight": "bmi-over", "Obese": "bmi-obese" };
+
+function renderWeightGoalResult(container, data) {
+  const badgeClass = BMI_BADGE_CLASS[data.bmi_category] || "bmi-normal";
+
+  // --- Card 1: BMI & assessment ---
+  const bmiCard = `
+    <div class="card">
+      <h2>Your Weight Assessment</h2>
+      <div class="bmi-row">
+        <div class="bmi-big">${data.bmi}</div>
+        <div>
+          <div class="bmi-badge ${badgeClass}">${escapeHtml(data.bmi_category)}</div>
+          <div class="muted" style="margin-top:4px">BMI (Body Mass Index)</div>
+        </div>
+      </div>
+      <div class="wg-stats">
+        <div class="wg-stat-row"><span>Current weight</span><strong>${data.current_weight_kg} kg</strong></div>
+        <div class="wg-stat-row"><span>Ideal weight</span><strong>${data.ideal_weight_kg} kg</strong></div>
+        <div class="wg-stat-row"><span>Healthy range</span><strong>${data.ideal_range.lower}–${data.ideal_range.upper} kg</strong></div>
+        ${data.weight_to_lose_kg > 0 ? `
+          <div class="wg-stat-row wg-stat-highlight"><span>To reach ideal</span><strong>Lose ${data.weight_to_lose_kg} kg</strong></div>
+          <div class="wg-stat-row"><span>Estimated timeline</span><strong>~${data.estimated_weeks} weeks</strong> at 0.5 kg/week</div>
+        ` : ""}
+      </div>
+      ${data.at_ideal_weight ? `<div class="flag under" style="margin-top:10px">🎉 You're in the healthy weight range — great work! Focus on maintaining with a balanced diet and regular movement.</div>` : ""}
+      ${data.is_underweight ? `<div class="flag over" style="margin-top:10px">⚠️ Your BMI is below the healthy range. Please speak with a doctor or dietitian about a safe weight-gain plan.</div>` : ""}
+    </div>`;
+
+  // --- Card 2: Diet targets (only if overweight) ---
+  let dietCard = "";
+  if (data.weight_to_lose_kg > 0 && data.loss_targets) {
+    const t = data.loss_targets;
+    dietCard = `
+      <div class="card" id="wg-diet-card">
+        <h2>🍽️ Daily Targets for Weight Loss</h2>
+        <div class="muted" style="margin-bottom:12px">
+          500 kcal below your maintenance (${Math.round(t.maintenance_calories)} kcal) — a safe rate of ~0.5 kg/week fat loss.
+        </div>
+        <div class="wg-targets-grid">
+          <div class="wg-target-cell"><div class="wg-target-val">${Math.round(t.calories).toLocaleString()}</div><div class="wg-target-lbl">Calories</div></div>
+          <div class="wg-target-cell"><div class="wg-target-val">${t.protein_g}g</div><div class="wg-target-lbl">Protein</div></div>
+          <div class="wg-target-cell"><div class="wg-target-val">${t.carbs_g}g</div><div class="wg-target-lbl">Carbs</div></div>
+          <div class="wg-target-cell"><div class="wg-target-val">${t.fat_g}g</div><div class="wg-target-lbl">Fat</div></div>
+        </div>
+        <div class="muted" style="margin:10px 0">Higher protein (${t.protein_g}g) helps preserve muscle while you lose fat.</div>
+        <button id="wg-apply-target-btn" class="primary-btn" type="button">✅ Apply These Targets</button>
+        <div id="wg-apply-status" class="muted" style="margin-top:8px;display:none"></div>
+        <button id="wg-go-mealplan-btn" class="secondary-btn" type="button">🥗 Generate Weight-Loss Meal Plan</button>
+      </div>`;
+  }
+
+  // --- Card 3: Exercise plan (lazy) ---
+  const exerciseCard = `
+    <div class="card" id="wg-exercise-card">
+      <h2>🏃 Exercise Plan</h2>
+      <div class="muted" style="margin-bottom:12px">Get a personalised, beginner-friendly weekly exercise plan generated by AI — no gym equipment required.</div>
+      <button id="wg-exercise-btn" class="secondary-btn" type="button">🤖 Generate My Exercise Plan</button>
+      <div id="wg-exercise-result"></div>
+    </div>`;
+
+  // --- Recalculate link ---
+  const recalcHtml = `<div style="text-align:center;margin-top:4px"><button class="link-btn" id="wg-recalc-btn">↩ Update my details</button></div>`;
+
+  container.innerHTML = bmiCard + dietCard + exerciseCard + recalcHtml;
+
+  // Apply target button
+  const applyBtn = container.querySelector("#wg-apply-target-btn");
+  if (applyBtn && data.loss_targets) {
+    applyBtn.addEventListener("click", async () => {
+      const statusEl = container.querySelector("#wg-apply-status");
+      setBusy(applyBtn, true, "Saving...");
+      try {
+        const res = await fetch("/api/profile/targets", {
+          method: "PUT",
+          headers: profileHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({
+            calories: data.loss_targets.calories,
+            protein_g: data.loss_targets.protein_g,
+            carbs_g: data.loss_targets.carbs_g,
+            fat_g: data.loss_targets.fat_g,
+          }),
+        });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || "Failed to save target.");
+        currentTargets = d.targets;
+        renderTargetDisplay(); // refresh the Target tab display
+        statusEl.textContent = "✅ Daily target updated! Head to Today tab to track your progress.";
+        statusEl.style.display = "block";
+      } catch (err) {
+        statusEl.textContent = `⚠️ ${err.message}`;
+        statusEl.style.display = "block";
+      } finally {
+        setBusy(applyBtn, false, "✅ Apply These Targets");
+      }
+    });
+  }
+
+  // Go to Meal Plan tab with weight-loss targets pre-filled
+  const mealPlanBtn = container.querySelector("#wg-go-mealplan-btn");
+  if (mealPlanBtn && data.loss_targets) {
+    mealPlanBtn.addEventListener("click", () => {
+      // Switch to Meal Plan tab and pre-fill with loss targets
+      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === "plan"));
+      document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.id === "tab-plan"));
+      planCaloriesInput.value = Math.round(data.loss_targets.calories);
+      planProteinInput.value  = Math.round(data.loss_targets.protein_g);
+      planTargetHint.textContent = "Pre-filled with your weight-loss targets — generate your plan below.";
+      planTargetHint.style.display = "block";
+      loadMealPlan();
+    });
+  }
+
+  // Recalculate — go back to the form
+  container.querySelector("#wg-recalc-btn").addEventListener("click", () => {
+    renderWeightGoalForm(container, currentBio || {});
+  });
+
+  // Exercise plan generation (lazy)
+  const exerciseBtn = container.querySelector("#wg-exercise-btn");
+  exerciseBtn.addEventListener("click", async () => {
+    const resultEl = container.querySelector("#wg-exercise-result");
+    setBusy(exerciseBtn, true, "Generating exercise plan... (~20s)");
+    try {
+      const res = await fetch("/api/weight-goal/exercises", {
+        method: "POST",
+        headers: profileHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          weight_to_lose_kg: data.weight_to_lose_kg,
+          age:               data.age,
+          activity:          data.activity,
+          sex:               data.sex,
+          bmi:               data.bmi,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Failed to generate plan.");
+      resultEl.innerHTML = renderExercisePlan(d.plan);
+      exerciseBtn.style.display = "none";
+    } catch (err) {
+      resultEl.innerHTML = `<div class="flag over" style="margin-top:10px">⚠️ ${escapeHtml(err.message)}</div>`;
+      setBusy(exerciseBtn, false, "🤖 Generate My Exercise Plan");
+    }
+  });
+}
+
+function intensityBadge(intensity) {
+  const map = { low: "🟢 Low", moderate: "🟡 Moderate", vigorous: "🔴 Vigorous" };
+  return map[intensity] || intensity;
+}
+
+function renderExercisePlan(plan) {
+  if (!plan) return `<div class="flag over">No plan returned.</div>`;
+
+  const cardioHtml = (plan.cardio || []).map((c) => `
+    <div class="ex-item">
+      <div class="ex-name">${escapeHtml(c.activity)}</div>
+      <div class="ex-meta">${c.duration_min} min · ${c.days_per_week}×/week · ${intensityBadge(c.intensity)}</div>
+      ${c.tip ? `<div class="ex-tip">${escapeHtml(c.tip)}</div>` : ""}
+    </div>`).join("");
+
+  const strengthHtml = (plan.strength || []).map((s) => `
+    <div class="ex-item">
+      <div class="ex-name">${escapeHtml(s.exercise)}</div>
+      <div class="ex-meta">${s.sets} sets · ${escapeHtml(s.reps)} · ${s.days_per_week}×/week</div>
+    </div>`).join("");
+
+  const tipsHtml = (plan.tips || []).map((t) => `<li>${escapeHtml(t)}</li>`).join("");
+
+  return `
+    <div class="ex-summary">${escapeHtml(plan.summary || "")}</div>
+
+    <div class="ex-section-title">❤️ Cardio</div>
+    <div class="ex-list">${cardioHtml}</div>
+
+    <div class="ex-section-title">💪 Strength Training</div>
+    <div class="ex-list">${strengthHtml}</div>
+
+    ${tipsHtml ? `
+    <div class="ex-section-title">💡 Tips</div>
+    <ul class="ex-tips">${tipsHtml}</ul>` : ""}
+
+    ${plan.est_weekly_calories_burned ? `<div class="muted" style="margin-top:12px">Estimated extra calories burned from exercise: ~${Math.round(plan.est_weekly_calories_burned).toLocaleString()} kcal/week</div>` : ""}
   `;
 }
 
