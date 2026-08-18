@@ -35,13 +35,17 @@ const RECIPE_TOOL = {
 };
 
 const SYSTEM_PROMPT = `You are a home cooking assistant specialized in Indian cuisine, embedded in a personal
-calorie tracking app. You will be given a list of dish names pulled from a meal plan. For EACH dish, write a simple,
-realistic recipe a home cook could actually follow: ingredients with practical quantities (sized for the given
-"serves" count, default 2), and clear numbered steps. Keep it practical for a typical Indian home kitchen (stovetop,
-pressure cooker, kadai/tawa) - no professional techniques or hard-to-find ingredients. Use the exact dish name given,
-copied verbatim, for each recipe's "name" field so it can be matched back up. Always call the generate_recipes tool
-with one entry per dish name given - do not skip any.`;
+calorie tracking app. You will be given a numbered list of dish names pulled from a meal plan. For EACH dish, write a
+simple, realistic recipe a home cook could actually follow: ingredients with practical quantities (sized for the
+given "serves" count, default 2), and clear numbered steps. Keep it practical for a typical Indian home kitchen
+(stovetop, pressure cooker, kadai/tawa) - no professional techniques or hard-to-find ingredients. Always call the
+generate_recipes tool with exactly one entry per dish, in the SAME ORDER as given (dish 1 first, dish 2 second, etc.)
+- do not skip, merge, or reorder any.`;
 
+// Matches recipes back to dish names by POSITION within the batch, not by
+// re-parsing the "name" Claude echoes back: it sometimes folds extra text
+// into that field, which silently broke exact-string matching and made
+// dishes show up as "recipe not available" even though Claude wrote one.
 async function generateRecipesBatch(dishNames) {
   const anthropic = getClient();
   const msg = await anthropic.messages.create({
@@ -53,11 +57,19 @@ async function generateRecipesBatch(dishNames) {
     messages: [
       {
         role: "user",
-        content: `Write recipes for these dishes:\n${dishNames.map((n) => `- ${n}`).join("\n")}`,
+        content: `Write recipes for these ${dishNames.length} dish(es), in this exact order:\n${dishNames
+          .map((n, i) => `${i + 1}. ${n}`)
+          .join("\n")}`,
       },
     ],
   });
-  return extractToolResult(msg, "generate_recipes").recipes || [];
+  const recipes = extractToolResult(msg, "generate_recipes").recipes || [];
+  if (recipes.length !== dishNames.length) {
+    const err = new Error("Recipe list didn't match the requested dishes. Please try again.");
+    err.status = 502;
+    throw err;
+  }
+  return dishNames.map((name, i) => ({ name, recipe: recipes[i] }));
 }
 
 // A full 7-day plan can easily have 30-40+ unique dishes, which risks
@@ -72,7 +84,7 @@ async function generateRecipes(dishNames) {
     batches.push(dishNames.slice(i, i + RECIPE_BATCH_SIZE));
   }
   const results = await Promise.all(batches.map(generateRecipesBatch));
-  return results.flat();
+  return results.flat(); // [{name, recipe}, ...] in original order
 }
 
 // Best-effort dish photo via Wikipedia's free public API - no API key required.
@@ -99,37 +111,30 @@ async function fetchDishImage(name) {
   }
 }
 
-function normalize(name) {
-  return String(name || "").trim().toLowerCase();
-}
-
 // Builds { [originalDishName]: { serves, prep_time_min, cook_time_min, ingredients, steps, image_url } }
-// keyed by the *exact* names passed in, regardless of casing Claude echoes back.
+// keyed by the *exact* names passed in - see generateRecipesBatch for why
+// this is positional rather than name-string matching.
 async function buildRecipePack(dishNames) {
   const uniqueNames = [...new Set(dishNames.map((n) => n.trim()).filter(Boolean))];
   if (uniqueNames.length === 0) return {};
 
-  const [recipeList, images] = await Promise.all([
+  const [paired, images] = await Promise.all([
     generateRecipes(uniqueNames),
     Promise.all(uniqueNames.map((n) => fetchDishImage(n))),
   ]);
 
-  const byNormalizedName = new Map(recipeList.map((r) => [normalize(r.name), r]));
-  const imageByName = new Map(uniqueNames.map((n, i) => [n, images[i]]));
-
   const pack = {};
-  for (const name of uniqueNames) {
-    const recipe = byNormalizedName.get(normalize(name));
+  paired.forEach(({ name, recipe }, i) => {
     pack[name] = {
       serves: recipe?.serves || null,
       prep_time_min: recipe?.prep_time_min || null,
       cook_time_min: recipe?.cook_time_min || null,
       ingredients: recipe?.ingredients || [],
       steps: recipe?.steps || [],
-      image_url: imageByName.get(name) || null,
+      image_url: images[i] || null,
       available: Boolean(recipe),
     };
-  }
+  });
   return pack;
 }
 

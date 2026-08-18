@@ -137,16 +137,21 @@ const ESTIMATE_MACROS_TOOL = {
 };
 
 const ESTIMATE_MACROS_SYSTEM_PROMPT = `You are a careful nutrition estimation assistant embedded in a personal
-calorie tracking app. You will be given a list of food items, each with a name, a portion description, and a weight
-in grams that the person has already decided on. Trust the given grams as the exact portion size - do not reinterpret
-or second-guess it from the portion description. For each item, estimate calories, protein, carbohydrates, and fat
-using standard nutrition knowledge (USDA-style values per 100g scaled to the given weight). Use the exact item name
-given, copied verbatim, so it can be matched back up. Always call the estimate_macros tool with one entry per item
-given - do not skip any. Be a reasonable, realistic estimator - don't refuse due to uncertainty.`;
+calorie tracking app. You will be given a numbered list of food items, each with a name, a portion description, and a
+weight in grams that the person has already decided on. Trust the given grams as the exact portion size - do not
+reinterpret or second-guess it from the portion description. For each item, estimate calories, protein, carbohydrates,
+and fat using standard nutrition knowledge (USDA-style values per 100g scaled to the given weight). Always call the
+estimate_macros tool with exactly one entry per item, in the SAME ORDER as given (item 1 first, item 2 second, etc.) -
+do not skip, merge, or reorder any. Be a reasonable, realistic estimator - don't refuse due to uncertainty.`;
 
 // Recomputes calories/protein/carbs/fat for a list of {name, portion_desc, grams}
 // items - used when a person edits a logged meal's name/portion/grams and the
 // macros need to be recalculated rather than hand-entered.
+//
+// Matches results back to inputs by POSITION, not by re-parsing the "name"
+// Claude echoes back: it sometimes folds the portion into that field (e.g.
+// "Grilled chicken breast, 1 piece" instead of "Grilled chicken breast"),
+// which silently broke exact-string matching and produced all-zero macros.
 async function estimateItemMacros(items) {
   const anthropic = getClient();
   const msg = await anthropic.messages.create({
@@ -158,17 +163,22 @@ async function estimateItemMacros(items) {
     messages: [
       {
         role: "user",
-        content: `Estimate nutrition for these items:\n${items
-          .map((it) => `- ${it.name}, ${it.portion_desc || "1 serving"}, ${it.grams}g`)
+        content: `Estimate nutrition for these ${items.length} item(s), in this exact order:\n${items
+          .map((it, i) => `${i + 1}. ${it.name} - portion: ${it.portion_desc || "1 serving"} - weight: ${it.grams}g`)
           .join("\n")}`,
       },
     ],
   });
   const result = extractToolResult(msg, "estimate_macros").items || [];
 
-  const byNormalizedName = new Map(result.map((r) => [String(r.name || "").trim().toLowerCase(), r]));
-  return items.map((it) => {
-    const est = byNormalizedName.get(it.name.trim().toLowerCase());
+  if (result.length !== items.length) {
+    const err = new Error("Nutrition estimate didn't match the item list. Please try saving again.");
+    err.status = 502;
+    throw err;
+  }
+
+  return items.map((it, i) => {
+    const est = result[i];
     return {
       name: it.name,
       portion_desc: it.portion_desc,
