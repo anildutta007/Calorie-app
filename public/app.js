@@ -638,7 +638,7 @@ async function loadToday() {
     const data = await res.json();
     hideDbBanner();
     renderTotals(document.getElementById("today-totals"), data.total, document.getElementById("today-summary"));
-    renderDayTimeline(document.getElementById("today-list"), data.meals, true);
+    renderDayTimeline(document.getElementById("today-list"), data.meals, true, loadToday, true);
     renderAllFlags(document.getElementById("today-flags"), data.meals);
   } catch (err) {
     showDbBanner(loadToday);
@@ -768,8 +768,11 @@ function renderMealList(container, meals, showEdit) {
   });
 }
 
-// --- 24-hour day timeline (Today tab) ---
-function renderDayTimeline(container, meals, showEdit) {
+// --- 24-hour day timeline (Today + History tabs) ---
+// showEdit    – show the Edit button (Today only)
+// onDelete    – callback to run after a meal is deleted
+// scrollToNow – scroll the current hour into view (Today only)
+function renderDayTimeline(container, meals, showEdit, onDelete, scrollToNow) {
   meals.forEach((m) => (mealsById[m.id] = m));
 
   // Group meals by the hour they were logged (local time)
@@ -842,18 +845,20 @@ function renderDayTimeline(container, meals, showEdit) {
     btn.addEventListener("click", async () => {
       if (!confirm("Delete this meal?")) return;
       await fetch(`/api/meals/${btn.dataset.id}`, { method: "DELETE", headers: profileHeaders() });
-      loadToday();
+      if (onDelete) onDelete();
     });
   });
   container.querySelectorAll(".edit-btn").forEach((btn) => {
     btn.addEventListener("click", () => openEditMealModal(mealsById[btn.dataset.id]));
   });
 
-  // Scroll current hour into view (after a tick so the DOM is painted)
-  requestAnimationFrame(() => {
-    const nowRow = container.querySelector(`[data-hour="${nowHour}"]`);
-    if (nowRow) nowRow.scrollIntoView({ behavior: "smooth", block: "center" });
-  });
+  // Scroll current hour into view — only when explicitly requested (Today tab)
+  if (scrollToNow) {
+    requestAnimationFrame(() => {
+      const nowRow = container.querySelector(`[data-hour="${nowHour}"]`);
+      if (nowRow) nowRow.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
 }
 
 function renderItemsCompact(items) {
@@ -873,10 +878,18 @@ async function loadHistory() {
     historyDateInput.value = new Date().toISOString().slice(0, 10);
   }
   const date = historyDateInput.value;
-  const res = await fetch(`/api/meals?date=${date}`, { headers: profileHeaders() });
-  const data = await res.json();
-  renderTotals(document.getElementById("history-totals"), data.total, document.getElementById("history-summary"));
-  renderMealList(document.getElementById("history-list"), data.meals);
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const res = await fetch(`/api/meals?date=${date}`, { headers: profileHeaders() });
+    if (res.status >= 500) throw new Error(`Server error ${res.status}`);
+    const data = await res.json();
+    hideDbBanner();
+    renderTotals(document.getElementById("history-totals"), data.total, document.getElementById("history-summary"));
+    // Scroll to current hour only when viewing today's date
+    renderDayTimeline(document.getElementById("history-list"), data.meals, false, loadHistory, date === today);
+  } catch (err) {
+    showDbBanner(loadHistory);
+  }
 }
 
 // --- Edit meal modal (Today tab only) ---
