@@ -802,12 +802,13 @@ function renderDayTimeline(container, meals, showEdit) {
         <div class="tl-card-header">
           <div class="tl-card-title">${escapeHtml(m.description)}</div>
           <div class="tl-card-actions">
+            <button class="detail-btn" data-id="${m.id}" title="Show food details">D</button>
             ${showEdit ? `<button class="edit-btn" data-id="${m.id}">Edit</button>` : ""}
             <button class="delete-btn" data-id="${m.id}">Delete</button>
           </div>
         </div>
         <div class="tl-card-time">${timeStr} · ${m.source}</div>
-        ${renderItemsCompact(m.items)}
+        <div class="tl-detail" hidden>${renderItemsCompact(m.items)}</div>
         <div class="tl-macros">
           <div class="tl-chip"><b>${Math.round(m.calories)}</b> kcal</div>
           <div class="tl-chip">P <b>${round1(m.protein_g)}g</b></div>
@@ -825,7 +826,18 @@ function renderDayTimeline(container, meals, showEdit) {
 
   container.innerHTML = `<div class="day-timeline">${rows}</div>`;
 
-  // Wire up delete and edit buttons
+  // Wire up detail toggle, delete and edit buttons
+  container.querySelectorAll(".detail-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const card   = btn.closest(".tl-card");
+      const detail = card.querySelector(".tl-detail");
+      const open   = !detail.hidden;
+      detail.hidden = open;
+      btn.classList.toggle("detail-btn-on", !open);
+      btn.title = open ? "Show food details" : "Hide food details";
+    });
+  });
+
   container.querySelectorAll(".delete-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
       if (!confirm("Delete this meal?")) return;
