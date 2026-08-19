@@ -370,7 +370,11 @@ app.post("/api/meal-plan", async (req, res) => {
       ? req.body.included_proteins.filter((p) => allowedProteins.includes(p))
       : [];
 
-    const plan = await generateMealPlan(calorieTarget, proteinTarget, diet, includedProteins, days);
+    // Free-text preferences (capped to prevent prompt-injection abuse)
+    const preferences = String(req.body.preferences || "").trim().slice(0, 500);
+    const avoid       = String(req.body.avoid       || "").trim().slice(0, 500);
+
+    const plan = await generateMealPlan(calorieTarget, proteinTarget, diet, includedProteins, days, preferences, avoid);
     const mealPlan = await saveMealPlan(req.profileId, calorieTarget, proteinTarget, diet, includedProteins, plan);
     res.json({ mealPlan });
   } catch (err) {

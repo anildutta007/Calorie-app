@@ -156,6 +156,12 @@
           <label class="checkbox-row"><input type="checkbox" class="protein-check" value="beef" /> Beef</label>
         </div>
 
+        <div class="pref-fields">
+          <label for="plan-likes">🍽️ Foods to include <span class="label-opt">(optional)</span></label>
+          <input type="text" id="plan-likes" placeholder="e.g. paneer, rajma, oats, dal makhani" maxlength="300" />
+          <label for="plan-avoid">🚫 Foods to avoid <span class="label-opt">(optional)</span></label>
+          <input type="text" id="plan-avoid" placeholder="e.g. bitter gourd, mushrooms, raw onion" maxlength="300" />
+        </div>
         <button id="generate-plan-btn" class="primary-btn">Generate Plan</button>
         <div id="plan-status" class="muted"></div>
       </div>

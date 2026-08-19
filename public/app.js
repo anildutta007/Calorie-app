@@ -846,6 +846,8 @@ editMealSaveBtn.addEventListener("click", async () => {
 const planDaysSelect = document.getElementById("plan-days");
 const planCaloriesInput = document.getElementById("plan-calories");
 const planProteinInput = document.getElementById("plan-protein");
+const planLikesInput = document.getElementById("plan-likes");
+const planAvoidInput = document.getElementById("plan-avoid");
 const dietButtons = document.querySelectorAll(".diet-btn");
 const vegOptions = document.getElementById("veg-options");
 const nonvegOptions = document.getElementById("nonveg-options");
@@ -856,6 +858,7 @@ let selectedDiet = "veg";
 let currentMealPlan = null; // the plan object currently rendered, needed for PDF export
 let currentRecipes = null; // { [dishName]: {serves, prep_time_min, cook_time_min, ingredients, steps, image_url} } | null
 let planDishNames = []; // index-addressed list rebuilt on each render, so recipe-link buttons never need to embed dish names in HTML attributes
+let pdfIncludedDishes = new Set(); // dish names whose recipes the user wants in the PDF (default none)
 
 function showDietOptions(diet) {
   vegOptions.style.display = diet === "veg" ? "grid" : "none";
@@ -920,7 +923,15 @@ generatePlanBtn.addEventListener("click", async () => {
     const res = await fetch("/api/meal-plan", {
       method: "POST",
       headers: profileHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ calories, protein_g, diet: selectedDiet, included_proteins: getCheckedProteins(), days }),
+      body: JSON.stringify({
+        calories,
+        protein_g,
+        diet: selectedDiet,
+        included_proteins: getCheckedProteins(),
+        days,
+        preferences: planLikesInput.value.trim(),
+        avoid: planAvoidInput.value.trim(),
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to generate plan.");
@@ -962,13 +973,17 @@ function resetMealPlanUI() {
   selectedDiet = "veg";
   showDietOptions(selectedDiet);
   resetProteinPanelsToDefaults();
+  planLikesInput.value = "";
+  planAvoidInput.value = "";
   currentMealPlan = null;
   currentRecipes = null;
+  pdfIncludedDishes = new Set();
   planStatus.textContent = "";
   planResult.innerHTML = `<div class="empty-state">No plan yet — set your targets above and generate one.</div>`;
 }
 
 function applyMealPlan(mealPlan) {
+  pdfIncludedDishes = new Set(); // clear PDF recipe selections for fresh plan
   planDaysSelect.value = String(Math.min(Math.max(mealPlan.days.length || 7, 1), 7));
   // Always prefill the form from the current daily target so new generations
   // use the latest target.  Only fall back to the plan's own stored targets
@@ -1033,7 +1048,8 @@ function renderPlanMeal(meal) {
     </div>`;
 }
 
-// Like renderItems, but each dish name is a clickable "how to cook" link.
+// Like renderItems, but each dish name is a clickable "how to cook" link and
+// has a checkbox to opt that dish's recipe into the PDF download.
 // Names are looked up by index (planDishNames) rather than embedded in a
 // data-* attribute, so no HTML-attribute-escaping edge cases to worry about.
 function renderPlanItems(items) {
@@ -1041,11 +1057,18 @@ function renderPlanItems(items) {
     .map((it) => {
       const idx = planDishNames.length;
       planDishNames.push(it.name);
+      const pdfChecked = pdfIncludedDishes.has(it.name) ? " checked" : "";
       return `
     <div class="item-row">
       <div>
         <div class="item-name">
-          <button class="recipe-link" data-idx="${idx}" type="button">${escapeHtml(it.name)} <span class="recipe-icon">🍳</span></button>
+          <div class="plan-item-actions">
+            <button class="recipe-link" data-idx="${idx}" type="button">${escapeHtml(it.name)} <span class="recipe-icon">🍳</span></button>
+            <label class="pdf-toggle" title="Include this recipe in the PDF download">
+              <input type="checkbox" class="pdf-recipe-check" data-idx="${idx}"${pdfChecked}>
+              📄 PDF
+            </label>
+          </div>
         </div>
         <div class="item-portion">${escapeHtml(it.portion_desc)} · ~${Math.round(it.grams)}g</div>
       </div>
@@ -1069,6 +1092,24 @@ planResult.addEventListener("click", (e) => {
   }
   const pdfBtn = e.target.closest("#download-pdf-btn");
   if (pdfBtn) downloadPlanPdf(pdfBtn);
+});
+
+// Track which dishes are opted into the PDF (change, not click, for checkboxes)
+planResult.addEventListener("change", (e) => {
+  const cb = e.target.closest(".pdf-recipe-check");
+  if (!cb) return;
+  const dishName = planDishNames[Number(cb.dataset.idx)];
+  if (!dishName) return;
+  if (cb.checked) pdfIncludedDishes.add(dishName);
+  else            pdfIncludedDishes.delete(dishName);
+  // Update the PDF button label with current recipe count
+  const pdfBtn = document.getElementById("download-pdf-btn");
+  if (pdfBtn) {
+    const n = pdfIncludedDishes.size;
+    pdfBtn.textContent = n > 0
+      ? `📄 Download PDF (${n} recipe${n > 1 ? "s" : ""})`
+      : "📄 Download PDF (no recipes)";
+  }
 });
 
 // --- Recipe modal ---
@@ -1136,16 +1177,21 @@ function recipeContentHtml(recipe) {
 async function downloadPlanPdf(btn) {
   const statusEl = document.getElementById("pdf-status");
   setBusy(btn, true, "Preparing...");
-  if (statusEl) statusEl.textContent = "Loading recipes for every dish (first time only, can take ~30-60s)...";
   try {
-    const recipes = await ensureRecipesLoaded();
+    let recipes = {};
+    if (pdfIncludedDishes.size > 0) {
+      const n = pdfIncludedDishes.size;
+      if (statusEl) statusEl.textContent = `Loading ${n} selected recipe${n > 1 ? "s" : ""} (first time can take ~30-60s)...`;
+      recipes = await ensureRecipesLoaded();
+    }
     buildPrintView(currentMealPlan, recipes);
     if (statusEl) statusEl.textContent = "";
     window.print();
   } catch (err) {
     if (statusEl) statusEl.textContent = err.message;
   } finally {
-    setBusy(btn, false, "📄 Download / Print PDF");
+    const n = pdfIncludedDishes.size;
+    setBusy(btn, false, n > 0 ? `📄 Download PDF (${n} recipe${n > 1 ? "s" : ""})` : "📄 Download PDF (no recipes)");
   }
 }
 
@@ -1163,7 +1209,7 @@ function buildPrintView(mealPlan, recipes) {
         .map(
           (meal) => `
         <h3>${escapeHtml(cap(meal.meal_type))}</h3>
-        ${meal.items.map((it) => renderPrintItem(it, recipes[it.name])).join("")}
+        ${meal.items.map((it) => renderPrintItem(it, recipes[it.name], pdfIncludedDishes.has(it.name))).join("")}
       `
         )
         .join("")}
@@ -1182,11 +1228,14 @@ function buildPrintView(mealPlan, recipes) {
   `;
 }
 
-function renderPrintItem(item, recipe) {
-  const imageHtml = recipe && recipe.image_url ? `<img src="${escapeHtml(recipe.image_url)}" class="print-recipe-photo" />` : "";
-  const ingredientsHtml =
-    recipe && recipe.ingredients.length ? `<ul>${recipe.ingredients.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>` : "";
-  const stepsHtml = recipe && recipe.steps.length ? `<ol>${recipe.steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>` : "";
+// includeRecipe = true only for dishes the user ticked the PDF checkbox on
+function renderPrintItem(item, recipe, includeRecipe) {
+  const imageHtml = includeRecipe && recipe && recipe.image_url
+    ? `<img src="${escapeHtml(recipe.image_url)}" class="print-recipe-photo" />` : "";
+  const ingredientsHtml = includeRecipe && recipe && recipe.ingredients && recipe.ingredients.length
+    ? `<ul>${recipe.ingredients.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>` : "";
+  const stepsHtml = includeRecipe && recipe && recipe.steps && recipe.steps.length
+    ? `<ol>${recipe.steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>` : "";
   return `
     <div class="print-item">
       <div class="print-item-header">

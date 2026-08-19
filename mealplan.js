@@ -108,10 +108,18 @@ function buildDietDescription(diet, includedProteins) {
   return desc;
 }
 
-async function generateMealPlan(calorieTarget, proteinTarget, diet, includedProteins, days) {
+async function generateMealPlan(calorieTarget, proteinTarget, diet, includedProteins, days, preferences = "", avoid = "") {
   const anthropic = getClient();
   const dietLabel = buildDietDescription(diet, includedProteins);
   const dayCount = Math.min(Math.max(Math.round(days) || 7, 1), 7);
+
+  // Append user preferences to the prompt if provided
+  const prefParts = [];
+  if (preferences) prefParts.push(`Foods to include / favourites: ${preferences}`);
+  if (avoid)       prefParts.push(`Foods to avoid / dislikes: ${avoid}`);
+  const prefText = prefParts.length
+    ? `\n\nPersonal preferences — please follow these carefully:\n${prefParts.join("\n")}`
+    : "";
 
   const msg = await anthropic.messages.create({
     model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
@@ -122,7 +130,7 @@ async function generateMealPlan(calorieTarget, proteinTarget, diet, includedProt
     messages: [
       {
         role: "user",
-        content: `Create a ${dayCount}-day Indian meal plan. Daily calorie target: ${calorieTarget} kcal. Daily protein target: ${proteinTarget}g. Diet: ${dietLabel}.`,
+        content: `Create a ${dayCount}-day Indian meal plan. Daily calorie target: ${calorieTarget} kcal. Daily protein target: ${proteinTarget}g. Diet: ${dietLabel}.${prefText}`,
       },
     ],
   });
