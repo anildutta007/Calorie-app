@@ -5,6 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 <title>Dutta Food Planner and Calorie Counter</title>
 <link rel="stylesheet" href="style.css" />
+
+<!-- PWA: manifest + icons + theme colour -->
+<link rel="manifest" href="/manifest.json" />
+<meta name="theme-color" content="#2f6f4f" />
+
+<!-- iOS home screen support -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Food Planner" />
+<link rel="apple-touch-icon" href="/icon.svg" />
 </head>
 <body>
   <!-- PROFILE GATE -->
@@ -255,5 +265,14 @@
   <div id="print-view"></div>
 
   <script src="app.js"></script>
+
+  <!-- Register service worker for PWA install prompt + offline cache -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      });
+    }
+  </script>
 </body>
 </html>

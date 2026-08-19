@@ -1,0 +1,26 @@
+{
+  "name": "Dutta Food Planner & Calorie Counter",
+  "short_name": "Food Planner",
+  "description": "Track Indian meals, plan your week, and reach your ideal weight.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d2018",
+  "theme_color": "#2f6f4f",
+  "orientation": "portrait-primary",
+  "lang": "en",
+  "categories": ["health", "food"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

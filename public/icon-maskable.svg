@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Maskable icon: safe zone is the inner 80% circle (≈205px radius from centre).
+       Fill the entire canvas with brand colour so Android adaptive icons look right. -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2a7050"/>
+      <stop offset="100%" stop-color="#0e2e1a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Full bleed background (no rounded corners — host clips the shape) -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <!-- Keep content well inside safe zone -->
+  <circle cx="256" cy="278" r="148" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="8"/>
+  <circle cx="256" cy="278" r="118" fill="rgba(255,255,255,0.04)"/>
+
+  <text x="254" y="340"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="220"
+        font-weight="700"
+        text-anchor="middle"
+        fill="#e8a020">D</text>
+
+  <!-- Fork -->
+  <line x1="140" y1="130" x2="140" y2="188" stroke="rgba(232,160,32,0.72)" stroke-width="8" stroke-linecap="round"/>
+  <line x1="157" y1="130" x2="157" y2="188" stroke="rgba(232,160,32,0.72)" stroke-width="8" stroke-linecap="round"/>
+  <line x1="174" y1="130" x2="174" y2="188" stroke="rgba(232,160,32,0.72)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M140 188 Q157 204 174 188" fill="none" stroke="rgba(232,160,32,0.72)" stroke-width="8" stroke-linecap="round"/>
+  <line x1="157" y1="204" x2="157" y2="255" stroke="rgba(232,160,32,0.72)" stroke-width="10" stroke-linecap="round"/>
+
+  <!-- Spoon -->
+  <ellipse cx="358" cy="158" rx="20" ry="28" fill="rgba(232,160,32,0.72)"/>
+  <line x1="358" y1="186" x2="358" y2="255" stroke="rgba(232,160,32,0.72)" stroke-width="10" stroke-linecap="round"/>
+</svg>
