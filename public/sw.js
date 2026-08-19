@@ -1,7 +1,17 @@
 // Service Worker — Dutta Food Planner
-// Cache static shell for offline load; always network-first for API calls.
+//
+// Strategy: NETWORK-FIRST for all static assets.
+// Always fetch fresh files from the server; serve from cache only when
+// the network is unavailable (offline / connection lost).
+//
+// Why network-first instead of cache-first?
+// The app doesn't use content-hashed filenames (app.js, style.css etc. keep
+// the same name across deployments), so a cache-first strategy would silently
+// serve stale files after every deploy.  Network-first means updates are
+// visible immediately while the app still loads when the user is offline.
 
-const CACHE = "dutta-v1";
+const CACHE = "dutta-v2"; // bump this whenever the SW logic itself changes
+
 const SHELL = [
   "/",
   "/index.html",
@@ -30,27 +40,27 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// ── Fetch strategy ────────────────────────────────────────
+// ── Fetch: network-first, cache as offline fallback ───────
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // 1. API requests → network only (never cache dynamic data)
+  // API requests and non-GET → pass through untouched (never cache)
   if (url.pathname.startsWith("/api/")) return;
-
-  // 2. Non-GET requests → network only
   if (event.request.method !== "GET") return;
 
-  // 3. Static assets → cache-first, fallback to network then cache update
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const fresh = fetch(event.request).then((response) => {
+    fetch(event.request)
+      .then((response) => {
+        // Update the cache with the fresh response for offline use
         if (response.ok) {
           const copy = response.clone();
           caches.open(CACHE).then((c) => c.put(event.request, copy));
         }
         return response;
-      });
-      return cached || fresh;
-    })
+      })
+      .catch(() =>
+        // Network unavailable — serve from cache so the app still opens
+        caches.match(event.request)
+      )
   );
 });
