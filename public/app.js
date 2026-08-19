@@ -184,12 +184,11 @@ tabButtons.forEach((btn) => {
     if (btn.dataset.tab === "today") loadToday();
     if (btn.dataset.tab === "history") loadHistory();
     if (btn.dataset.tab === "plan") loadMealPlan();
-    if (btn.dataset.tab === "target") {
-      loadBio();
-      loadTargets();
-    }
     if (btn.dataset.tab === "progress") loadProgress();
-    if (btn.dataset.tab === "goal") loadWeightGoal();
+    if (btn.dataset.tab === "goal") {
+      loadTargets(); // refresh target display at top of merged tab
+      loadWeightGoal();
+    }
   });
 });
 
@@ -1206,7 +1205,8 @@ function renderPrintItem(item, recipe) {
 let wgSelectedSex = "male";
 
 async function loadWeightGoal() {
-  const container = document.getElementById("tab-goal");
+  // Render into the sub-div so the static Daily Target card above is preserved
+  const container = document.getElementById("goal-assessment");
 
   // Ensure bio is in memory (enterApp() loads it but may not have awaited yet)
   if (!currentBio) await loadBio();

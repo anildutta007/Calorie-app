@@ -62,9 +62,8 @@
         <button class="tab-btn" data-tab="today">📅 Today</button>
         <button class="tab-btn" data-tab="history">📊 History</button>
         <button class="tab-btn" data-tab="plan">🥗 Meal Plan</button>
-        <button class="tab-btn" data-tab="target">🎯 Target</button>
         <button class="tab-btn" data-tab="progress">📈 Progress</button>
-        <button class="tab-btn" data-tab="goal">⚖️ Goal</button>
+        <button class="tab-btn" data-tab="goal">🎯 Goals</button>
       </nav>
     </header>
 
@@ -163,14 +162,21 @@
       <div id="plan-result"></div>
     </section>
 
-    <!-- TARGET TAB -->
-    <section id="tab-target" class="tab">
+    <!-- PROGRESS TAB -->
+    <section id="tab-progress" class="tab">
+      <div class="empty-state">Tap the Progress tab to load your 7-day data.</div>
+    </section>
+
+    <!-- GOALS TAB (merged Target + Goal) -->
+    <section id="tab-goal" class="tab">
+      <!-- Static: current daily target + manual edit form -->
       <div class="card">
         <div class="target-header">
           <h2>🎯 Daily Target</h2>
           <button id="edit-target-btn" class="link-btn" type="button">Edit</button>
         </div>
         <div id="target-display" class="muted">No daily target set yet.</div>
+        <div class="muted" style="font-size:0.8rem;margin-top:4px">Drives color-coded progress bars on Today &amp; History tabs.</div>
         <div id="target-form" style="display:none">
           <div class="target-calc-box">
             <div class="muted" style="margin-bottom:8px">Not sure what your numbers should be? Calculate a suggested target:</div>
@@ -211,19 +217,9 @@
           <div id="target-form-error" class="flag over" style="display:none"></div>
         </div>
       </div>
-      <div class="card">
-        <div class="muted">This target drives the color-coded totals and day summary on the Today and History tabs.</div>
-      </div>
-    </section>
-    <!-- PROGRESS TAB -->
-    <section id="tab-progress" class="tab">
-      <div class="empty-state">Tap the Progress tab to load your 7-day data.</div>
-    </section>
 
-    <!-- WEIGHT GOAL TAB -->
-    <section id="tab-goal" class="tab">
-      <!-- rendered dynamically by loadWeightGoal() -->
-      <div class="empty-state">Tap ⚖️ Goal to see your ideal weight and personalised plan.</div>
+      <!-- Dynamic: BMI assessment + weight-loss targets + exercise plan -->
+      <div id="goal-assessment"></div>
     </section>
   </div>
 
