@@ -29,6 +29,22 @@ function profileHeaders(extra = {}) {
   return { ...extra, "X-Profile-Id": currentProfile ? String(currentProfile.id) : "" };
 }
 
+// --- DB error banner (shown when the database is temporarily unreachable) ---
+const dbBanner = document.getElementById("db-banner");
+const dbBannerRetry = document.getElementById("db-banner-retry");
+
+function showDbBanner(retryFn) {
+  dbBanner.style.display = "flex";
+  dbBannerRetry.onclick = () => {
+    dbBanner.style.display = "none";
+    retryFn();
+  };
+}
+
+function hideDbBanner() {
+  dbBanner.style.display = "none";
+}
+
 async function initProfileGate() {
   const saved = localStorage.getItem(PROFILE_KEY);
   if (saved) {
@@ -49,9 +65,19 @@ async function showProfileList() {
   profilePinStep.style.display = "none";
   profileNewStep.style.display = "none";
   profileListStep.style.display = "block";
-  const res = await fetch("/api/profiles");
-  const data = await res.json();
-  renderProfileList(data.profiles || []);
+  try {
+    const res = await fetch("/api/profiles");
+    if (res.status >= 500) throw new Error(`Server error ${res.status}`);
+    const data = await res.json();
+    renderProfileList(data.profiles || []);
+  } catch (err) {
+    profileListEl.innerHTML = `
+      <div class="flag over" style="margin-bottom:10px">
+        ⚠️ Could not reach the database — please check your connection and try again.
+      </div>
+      <button class="secondary-btn" id="profile-list-retry">↺ Try again</button>`;
+    document.getElementById("profile-list-retry")?.addEventListener("click", showProfileList);
+  }
 }
 
 function renderProfileList(profiles) {
@@ -606,11 +632,17 @@ function daySummaryLine(total) {
 
 // --- Today tab ---
 async function loadToday() {
-  const res = await fetch("/api/meals", { headers: profileHeaders() });
-  const data = await res.json();
-  renderTotals(document.getElementById("today-totals"), data.total, document.getElementById("today-summary"));
-  renderMealList(document.getElementById("today-list"), data.meals, true);
-  renderAllFlags(document.getElementById("today-flags"), data.meals);
+  try {
+    const res = await fetch("/api/meals", { headers: profileHeaders() });
+    if (res.status >= 500) throw new Error(`Server error ${res.status}`);
+    const data = await res.json();
+    hideDbBanner();
+    renderTotals(document.getElementById("today-totals"), data.total, document.getElementById("today-summary"));
+    renderDayTimeline(document.getElementById("today-list"), data.meals, true);
+    renderAllFlags(document.getElementById("today-flags"), data.meals);
+  } catch (err) {
+    showDbBanner(loadToday);
+  }
 }
 
 function renderAllFlags(container, meals) {
@@ -734,6 +766,90 @@ function renderMealList(container, meals, showEdit) {
   container.querySelectorAll(".edit-btn").forEach((btn) => {
     btn.addEventListener("click", () => openEditMealModal(mealsById[btn.dataset.id]));
   });
+}
+
+// --- 24-hour day timeline (Today tab) ---
+function renderDayTimeline(container, meals, showEdit) {
+  meals.forEach((m) => (mealsById[m.id] = m));
+
+  // Group meals by the hour they were logged (local time)
+  const byHour = {};
+  meals.forEach((m) => {
+    const h = new Date(m.created_at).getHours();
+    (byHour[h] = byHour[h] || []).push(m);
+  });
+
+  const nowHour = new Date().getHours();
+
+  const rows = Array.from({ length: 24 }, (_, h) => {
+    const label = `${String(h).padStart(2, "0")}:00`;
+    const isCurrent = h === nowHour;
+    const slotMeals = byHour[h] || [];
+    const rowClass = `tl-row${slotMeals.length ? " tl-meals" : " tl-empty"}${isCurrent ? " tl-now" : ""}`;
+
+    if (!slotMeals.length) {
+      return `<div class="${rowClass}" data-hour="${h}">
+        <div class="tl-label">${label}</div>
+        ${isCurrent
+          ? '<div class="tl-now-marker"></div>'
+          : '<div class="tl-rule"></div>'}
+      </div>`;
+    }
+
+    const cardsHtml = slotMeals.map((m) => {
+      const timeStr = new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return `<div class="tl-card">
+        <div class="tl-card-header">
+          <div class="tl-card-title">${escapeHtml(m.description)}</div>
+          <div class="tl-card-actions">
+            ${showEdit ? `<button class="edit-btn" data-id="${m.id}">Edit</button>` : ""}
+            <button class="delete-btn" data-id="${m.id}">Delete</button>
+          </div>
+        </div>
+        <div class="tl-card-time">${timeStr} · ${m.source}</div>
+        ${renderItemsCompact(m.items)}
+        <div class="tl-macros">
+          <div class="tl-chip"><b>${Math.round(m.calories)}</b> kcal</div>
+          <div class="tl-chip">P <b>${round1(m.protein_g)}g</b></div>
+          <div class="tl-chip">C <b>${round1(m.carbs_g)}g</b></div>
+          <div class="tl-chip">F <b>${round1(m.fat_g)}g</b></div>
+        </div>
+      </div>`;
+    }).join("");
+
+    return `<div class="${rowClass}" data-hour="${h}">
+      <div class="tl-label">${label}</div>
+      <div class="tl-cards">${cardsHtml}</div>
+    </div>`;
+  }).join("");
+
+  container.innerHTML = `<div class="day-timeline">${rows}</div>`;
+
+  // Wire up delete and edit buttons
+  container.querySelectorAll(".delete-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Delete this meal?")) return;
+      await fetch(`/api/meals/${btn.dataset.id}`, { method: "DELETE", headers: profileHeaders() });
+      loadToday();
+    });
+  });
+  container.querySelectorAll(".edit-btn").forEach((btn) => {
+    btn.addEventListener("click", () => openEditMealModal(mealsById[btn.dataset.id]));
+  });
+
+  // Scroll current hour into view (after a tick so the DOM is painted)
+  requestAnimationFrame(() => {
+    const nowRow = container.querySelector(`[data-hour="${nowHour}"]`);
+    if (nowRow) nowRow.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
+
+function renderItemsCompact(items) {
+  if (!items || !items.length) return "";
+  const parts = items.map(
+    (it) => `${escapeHtml(it.name)} <span class="tl-item-g">~${Math.round(it.grams)}g</span>`
+  );
+  return `<div class="tl-items">${parts.join(" &middot; ")}</div>`;
 }
 
 // --- History tab ---

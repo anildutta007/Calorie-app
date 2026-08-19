@@ -55,6 +55,13 @@
   </div>
 
   <div id="app-main" class="app">
+
+    <!-- Shown when the database is temporarily unreachable -->
+    <div id="db-banner" class="db-banner" style="display:none" role="alert">
+      <span>⚠️ Database temporarily unreachable — data may not load correctly.</span>
+      <button id="db-banner-retry" class="db-banner-btn">Retry now</button>
+    </div>
+
     <header>
       <div class="app-logo">
         <div class="app-logo-icon">🥗</div>

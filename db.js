@@ -12,7 +12,28 @@ if (!connectionString) {
   );
 }
 
-const sql = neon(connectionString);
+const rawSql = neon(connectionString);
+
+// Retry wrapper: Neon's control plane can have transient blips flagged with
+// neon:retryable === true.  Retry up to 3 times with linear back-off before
+// giving up and letting the error surface to the caller.
+async function withRetry(fn, maxAttempts = 3) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err["neon:retryable"] !== true || attempt >= maxAttempts) throw err;
+      const delayMs = 800 * attempt; // 800 ms, 1 600 ms
+      console.log(
+        `[db] Neon transient error (attempt ${attempt}/${maxAttempts}), retrying in ${delayMs} ms…`
+      );
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+}
+
+// Wrap the tagged-template sql function so every query auto-retries.
+const sql = (strings, ...values) => withRetry(() => rawSql(strings, ...values));
 
 let initialized = null;
 
@@ -97,6 +118,9 @@ async function init() {
       await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS sodium_mg REAL DEFAULT 0`;
       await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS saturated_fat_g REAL DEFAULT 0`;
     })();
+    // If init fails (e.g. all retries exhausted), reset so the next call can
+    // retry from scratch rather than re-throwing the stale rejection forever.
+    initialized.catch(() => { initialized = null; });
   }
   return initialized;
 }
