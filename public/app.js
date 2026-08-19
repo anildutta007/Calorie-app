@@ -1475,11 +1475,18 @@ function renderExercisePlan(plan) {
       ${c.tip ? `<div class="ex-tip">${escapeHtml(c.tip)}</div>` : ""}
     </div>`).join("");
 
-  const strengthHtml = (plan.strength || []).map((s) => `
+  const strengthHtml = (plan.strength || []).map((s) => {
+    const query = encodeURIComponent(s.search_query || `how to do ${s.exercise}`);
+    const videoUrl = `https://www.youtube.com/results?search_query=${query}`;
+    return `
     <div class="ex-item">
-      <div class="ex-name">${escapeHtml(s.exercise)}</div>
+      <div class="ex-name">
+        ${escapeHtml(s.exercise)}
+        <a href="${videoUrl}" target="_blank" rel="noopener noreferrer" class="ex-video-link">▶ How to</a>
+      </div>
       <div class="ex-meta">${s.sets} sets · ${escapeHtml(s.reps)} · ${s.days_per_week}×/week</div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 
   const tipsHtml = (plan.tips || []).map((t) => `<li>${escapeHtml(t)}</li>`).join("");
 

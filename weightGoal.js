@@ -98,8 +98,9 @@ const EXERCISE_TOOL = {
             sets:          { type: "number" },
             reps:          { type: "string", description: "e.g. '12-15' or '30 seconds'." },
             days_per_week: { type: "number" },
+            search_query:  { type: "string", description: "YouTube search query to find a clear tutorial for this exercise, e.g. 'proper bodyweight squat form beginner' or 'knee push-up tutorial'." },
           },
-          required: ["exercise", "sets", "reps", "days_per_week"],
+          required: ["exercise", "sets", "reps", "days_per_week", "search_query"],
         },
       },
       tips: {
