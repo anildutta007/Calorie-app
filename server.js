@@ -459,7 +459,7 @@ app.post("/api/meal-plan/email", async (req, res) => {
     const resend = new Resend(process.env.RESEND_API_KEY);
     const days = mealPlan.days ? mealPlan.days.length : 7;
     const { error: sendError } = await resend.emails.send({
-      from: "Dutta Food Planner <noreply@duttafoodplanner.com>",
+      from: "Dutta Food Planner <noreply@duttagroup.uk>",
       to: [email],
       subject: `Your ${days}-Day Indian Meal Plan 🍽️`,
       html,
