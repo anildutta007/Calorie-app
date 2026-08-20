@@ -996,6 +996,88 @@ input[type="file"] {
   line-height: 1.7;
 }
 
+/* --- AI Progress Summary card --- */
+.ai-summary-card { padding: 14px 16px; }
+
+/* Loading shimmer */
+.ai-summary-loading { display: flex; flex-direction: column; gap: 8px; }
+.ai-shimmer {
+  background: var(--border);
+  border-radius: 4px;
+  animation: shimmer 1.4s infinite ease-in-out;
+}
+.ai-shimmer-score { width: 52px; height: 52px; border-radius: 50%; }
+.ai-shimmer-line  { height: 12px; }
+
+/* Header row: badge + text */
+.ai-summary-header {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+.ai-score-badge {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1;
+  color: white;
+}
+.ai-score-denom { font-size: 0.65rem; font-weight: 500; opacity: 0.85; margin-left: 1px; }
+.score-good { background: #16a34a; }
+.score-ok   { background: #d97706; }
+.score-low  { background: #dc2626; }
+
+.ai-summary-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.ai-summary-text {
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+/* Two-column suggestions */
+.ai-suggestions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.ai-suggest-head {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+.ai-suggest-include { color: #16a34a; }
+.ai-suggest-exclude { color: #dc2626; }
+.ai-suggest-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ai-suggest-list li {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
 /* --- Progress tab --- */
 
 .prog-chart-header {

@@ -22,7 +22,7 @@ const {
   setProfileBio,
   getProgressSummary,
 } = require("./db");
-const { analyzeMealText, analyzeMealPhoto, estimateItemMacros, generateDailyQuote } = require("./nutrition");
+const { analyzeMealText, analyzeMealPhoto, estimateItemMacros, generateDailyQuote, generateProgressSummary } = require("./nutrition");
 const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mealplan");
 const { buildRecipePack } = require("./recipes");
 const { calculateTargets, ACTIVITY_MULTIPLIERS } = require("./nutritionCalc");
@@ -495,6 +495,25 @@ app.get("/api/progress", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || "Failed to load progress." });
+  }
+});
+
+// 7-day AI progress summary — score, narrative, food suggestions
+app.post("/api/progress/ai-summary", requireProfile, async (req, res) => {
+  const { name, targets, week } = req.body;
+  if (!Array.isArray(week) || week.length === 0) {
+    return res.status(400).json({ error: "No week data provided." });
+  }
+  try {
+    const result = await generateProgressSummary(
+      (name || "").slice(0, 50) || "there",
+      targets || null,
+      week
+    );
+    res.json(result);
+  } catch (err) {
+    console.error("progress/ai-summary error:", err.message);
+    res.status(500).json({ error: "Could not generate summary." });
   }
 });
 

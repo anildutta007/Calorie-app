@@ -1889,9 +1889,68 @@ function renderProgress(dayRows) {
       <h2>📈 Last 7 Days</h2>
       <div class="muted">${loggedCount} of 7 days logged${loggedCount === 0 ? " — start logging meals to see your progress!" : ""}</div>
     </div>
+    <div id="ai-summary-card" class="card ai-summary-card">
+      <div class="ai-summary-loading">
+        <div class="ai-shimmer ai-shimmer-score"></div>
+        <div class="ai-shimmer ai-shimmer-line" style="width:90%"></div>
+        <div class="ai-shimmer ai-shimmer-line" style="width:75%"></div>
+      </div>
+    </div>
     ${metrics.map(chartHtml).join("")}
     ${nutrientsHtml}
   `;
+
+  // Kick off AI summary async — fills in #ai-summary-card when ready
+  if (loggedCount > 0) {
+    loadProgressAiSummary(week);
+  } else {
+    document.getElementById("ai-summary-card").innerHTML =
+      `<div class="muted" style="font-size:0.85rem">Log at least one day of meals to get your AI diet summary.</div>`;
+  }
+}
+
+async function loadProgressAiSummary(week) {
+  const card = document.getElementById("ai-summary-card");
+  if (!card) return;
+  try {
+    const res = await fetch("/api/progress/ai-summary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...profileHeaders() },
+      body: JSON.stringify({
+        name: currentProfile.name,
+        targets: currentTargets,
+        week,
+      }),
+    });
+    if (!res.ok) throw new Error("summary fetch failed");
+    const { score, summary, include, exclude } = await res.json();
+
+    const scoreClass = score >= 8 ? "score-good" : score >= 5 ? "score-ok" : "score-low";
+    const includeHtml = include.map((s) => `<li>${escapeHtml(s)}</li>`).join("");
+    const excludeHtml = exclude.map((s) => `<li>${escapeHtml(s)}</li>`).join("");
+
+    card.innerHTML = `
+      <div class="ai-summary-header">
+        <div class="ai-score-badge ${scoreClass}">${score}<span class="ai-score-denom">/10</span></div>
+        <div class="ai-summary-title">
+          <div class="ai-summary-label">AI Diet Review</div>
+          <div class="ai-summary-text">${escapeHtml(summary)}</div>
+        </div>
+      </div>
+      <div class="ai-suggestions">
+        <div class="ai-suggest-col">
+          <div class="ai-suggest-head ai-suggest-include">✅ Include more</div>
+          <ul class="ai-suggest-list">${includeHtml}</ul>
+        </div>
+        <div class="ai-suggest-col">
+          <div class="ai-suggest-head ai-suggest-exclude">🚫 Reduce</div>
+          <ul class="ai-suggest-list">${excludeHtml}</ul>
+        </div>
+      </div>`;
+  } catch {
+    if (card) card.innerHTML =
+      `<div class="muted" style="font-size:0.85rem">Could not load AI summary — please try again later.</div>`;
+  }
 }
 
 // Init

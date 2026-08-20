@@ -205,6 +205,70 @@ async function estimateItemMacros(items) {
   });
 }
 
+// ── 7-day progress AI summary ─────────────────────────────────────────────────
+// Returns { score (1-10), summary (string), include (string[]), exclude (string[]) }
+async function generateProgressSummary(name, targets, week) {
+  const client = getClient();
+
+  const hasTargets = targets && targets.calories;
+  const loggedCount = week.filter((d) => d.hasData).length;
+
+  const targetLine = hasTargets
+    ? `Daily targets: ${targets.calories} kcal | protein ${targets.protein_g}g | carbs ${targets.carbs_g}g | fat ${targets.fat_g}g`
+    : "No daily targets set — scoring based on logging consistency and macro balance only.";
+
+  const dayLines = week
+    .map((d) => {
+      if (!d.hasData) return `  ${d.date} (${d.dayLabel}): no meals logged`;
+      const diff = hasTargets ? ` | cal diff vs target: ${d.calories - targets.calories > 0 ? "+" : ""}${Math.round(d.calories - targets.calories)}` : "";
+      return `  ${d.date} (${d.dayLabel}): ${Math.round(d.calories)} kcal${diff} | protein ${Math.round(d.protein_g)}g | carbs ${Math.round(d.carbs_g)}g | fat ${Math.round(d.fat_g)}g | fiber ${Math.round(d.fiber_g)}g | sugar ${Math.round(d.sugar_g)}g | sodium ${Math.round(d.sodium_mg)}mg | sat-fat ${Math.round(d.saturated_fat_g)}g`;
+    })
+    .join("\n");
+
+  const msg = await client.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 500,
+    tools: [{
+      name: "diet_review",
+      description: "Submit a structured 7-day diet adherence review",
+      input_schema: {
+        type: "object",
+        properties: {
+          score: {
+            type: "integer",
+            description: "Diet adherence score 1–10. Weight: logging consistency (days logged out of 7) 40%, calorie accuracy (avg deviation from target) 40%, macro balance 20%. Be honest but encouraging.",
+            minimum: 1, maximum: 10
+          },
+          summary: {
+            type: "string",
+            description: "Exactly 2 sentences. Sentence 1: what went well, using the user's name. Sentence 2: the single most important thing to improve. Be warm, specific, no generic filler."
+          },
+          include: {
+            type: "array",
+            items: { type: "string" },
+            description: "2–3 specific foods or food types to eat MORE of based on nutritional gaps in the data. Prefer Indian foods where appropriate. Format each as: 'Food name — short reason tied to their data'. E.g. 'Masoor dal — high protein and fiber, addresses your low protein days'.",
+            minItems: 2, maxItems: 3
+          },
+          exclude: {
+            type: "array",
+            items: { type: "string" },
+            description: "2–3 specific foods or patterns to REDUCE based on the data (excess sugar, sodium, saturated fat, or calorie spikes). Format each as: 'Food/pattern — short reason'. E.g. 'Fried snacks in the evening — likely driving your fat overage on Tue and Thu'.",
+            minItems: 2, maxItems: 3
+          }
+        },
+        required: ["score", "summary", "include", "exclude"]
+      }
+    }],
+    tool_choice: { type: "tool", name: "diet_review" },
+    messages: [{
+      role: "user",
+      content: `Review the last 7 days of diet data for ${name}.\n\n${targetLine}\nDays logged: ${loggedCount}/7\n\n${dayLines}`
+    }]
+  });
+
+  return extractToolResult(msg, "diet_review");
+}
+
 // ── Daily motivational greeting ───────────────────────────────────────────────
 async function generateDailyQuote(name) {
   const client = getClient();
@@ -219,4 +283,4 @@ async function generateDailyQuote(name) {
   return message.content[0].text.trim();
 }
 
-module.exports = { analyzeMealText, analyzeMealPhoto, getClient, extractToolResult, estimateItemMacros, generateDailyQuote };
+module.exports = { analyzeMealText, analyzeMealPhoto, getClient, extractToolResult, estimateItemMacros, generateDailyQuote, generateProgressSummary };
