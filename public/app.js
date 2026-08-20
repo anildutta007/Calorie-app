@@ -2029,12 +2029,16 @@ function renderProgress(dayRows) {
     ${nutrientsHtml}
   `;
 
-  // Kick off AI summary async — fills in #ai-summary-card when ready
-  if (loggedCount > 0) {
-    loadProgressAiSummary(week);
+  // Kick off AI summary async — fills in #ai-summary-card when ready.
+  // Exclude today (week[0]) so the AI only sees completed days — today's
+  // log is likely still in progress and would skew the analysis.
+  const weekForAi = week.slice(1); // drop today (index 0)
+  const loggedCountForAi = weekForAi.filter((d) => d.hasData).length;
+  if (loggedCountForAi > 0) {
+    loadProgressAiSummary(weekForAi);
   } else {
     document.getElementById("ai-summary-card").innerHTML =
-      `<div class="muted" style="font-size:0.85rem">Log at least one day of meals to get your AI diet summary.</div>`;
+      `<div class="muted" style="font-size:0.85rem">Log at least one full day of meals to get your AI diet summary.</div>`;
   }
 }
 
