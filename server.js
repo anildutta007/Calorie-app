@@ -28,6 +28,8 @@ const { buildRecipePack } = require("./recipes");
 const { calculateTargets, ACTIVITY_MULTIPLIERS } = require("./nutritionCalc");
 const { flagPortion } = require("./portions");
 const { calcIdealWeight, calcBmi, bmiCategory, calcWeightLossTargets, generateExercisePlan } = require("./weightGoal");
+const { buildMealPlanEmail } = require("./emailTemplate");
+const { Resend } = require("resend");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -411,6 +413,67 @@ app.post("/api/meal-plan/recipes", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(err.status || 500).json({ error: err.message || "Failed to generate recipes." });
+  }
+});
+
+// Send the current meal plan (+ selected recipes) to an email address via Resend.
+// Body: { email: string, selectedRecipeNames: string[] }
+app.post("/api/meal-plan/email", async (req, res) => {
+  try {
+    const { email, selectedRecipeNames } = req.body;
+
+    // Validate email
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Please enter a valid email address." });
+    }
+
+    // Check Resend is configured
+    if (!process.env.RESEND_API_KEY) {
+      return res.status(500).json({ error: "Email is not configured on the server yet. Please ask the admin to add RESEND_API_KEY." });
+    }
+
+    // Load the meal plan
+    const mealPlan = await getLatestMealPlan(req.profileId);
+    if (!mealPlan) {
+      return res.status(404).json({ error: "No meal plan found. Please generate one first." });
+    }
+
+    // Load recipes if the user requested any
+    let recipes = {};
+    const recipeNames = Array.isArray(selectedRecipeNames) ? selectedRecipeNames.filter(Boolean) : [];
+    if (recipeNames.length > 0) {
+      // Use cached recipes from the plan if available, otherwise generate fresh
+      recipes = mealPlan.recipes || {};
+      const missing = recipeNames.filter((n) => !recipes[n]);
+      if (missing.length > 0) {
+        const { buildRecipePack } = require("./recipes");
+        const freshPack = await buildRecipePack(missing);
+        recipes = { ...recipes, ...freshPack };
+      }
+    }
+
+    // Build the HTML email
+    const html = buildMealPlanEmail(mealPlan, recipeNames, recipes);
+
+    // Send via Resend
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const days = mealPlan.days ? mealPlan.days.length : 7;
+    const { error: sendError } = await resend.emails.send({
+      from: "Dutta Food Planner <noreply@duttafoodplanner.com>",
+      to: [email],
+      subject: `Your ${days}-Day Indian Meal Plan 🍽️`,
+      html,
+    });
+
+    if (sendError) {
+      console.error("Resend error:", sendError);
+      return res.status(502).json({ error: sendError.message || "Failed to send email." });
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("meal-plan/email error:", err);
+    res.status(err.status || 500).json({ error: err.message || "Failed to send email." });
   }
 });
 

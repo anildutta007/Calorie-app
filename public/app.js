@@ -1210,6 +1210,11 @@ function renderMealPlan(mealPlan) {
       ${mealPlan.summary ? `<p style="margin-bottom:0">${escapeHtml(mealPlan.summary)}</p>` : ""}
       <button id="download-pdf-btn" class="secondary-btn" type="button">📄 Download / Print PDF</button>
       <div id="pdf-status" class="muted"></div>
+      <div class="email-plan-row">
+        <input id="email-plan-input" type="email" placeholder="your@email.com" autocomplete="email" />
+        <button id="send-email-btn" class="secondary-btn" type="button">📧 Send to Email</button>
+      </div>
+      <div id="email-plan-status" class="muted"></div>
     </div>
     ${mealPlan.days.map(renderPlanDay).join("")}
   `;
@@ -1283,6 +1288,9 @@ planResult.addEventListener("click", (e) => {
   }
   const pdfBtn = e.target.closest("#download-pdf-btn");
   if (pdfBtn) downloadPlanPdf(pdfBtn);
+
+  const emailBtn = e.target.closest("#send-email-btn");
+  if (emailBtn) sendPlanEmail(emailBtn);
 });
 
 // Track which dishes are opted into the PDF (change, not click, for checkboxes)
@@ -1383,6 +1391,46 @@ async function downloadPlanPdf(btn) {
   } finally {
     const n = pdfIncludedDishes.size;
     setBusy(btn, false, n > 0 ? `📄 Download PDF (${n} recipe${n > 1 ? "s" : ""})` : "📄 Download PDF (no recipes)");
+  }
+}
+
+async function sendPlanEmail(btn) {
+  const emailInput = document.getElementById("email-plan-input");
+  const statusEl   = document.getElementById("email-plan-status");
+  const email = (emailInput?.value || "").trim();
+
+  if (!email) {
+    if (statusEl) statusEl.textContent = "⚠️ Please enter an email address.";
+    emailInput?.focus();
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (statusEl) statusEl.textContent = "⚠️ Please enter a valid email address.";
+    emailInput?.focus();
+    return;
+  }
+
+  const selectedRecipeNames = [...pdfIncludedDishes];
+  const n = selectedRecipeNames.length;
+  setBusy(btn, true, "Sending…");
+  if (statusEl) statusEl.textContent = n > 0
+    ? `Preparing email with ${n} recipe${n > 1 ? "s" : ""} — this may take ~30 seconds the first time...`
+    : "Sending meal plan...";
+
+  try {
+    const res = await fetch("/api/meal-plan/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...profileHeaders() },
+      body: JSON.stringify({ email, selectedRecipeNames }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to send.");
+    if (statusEl) statusEl.textContent = `✅ Sent! Check ${email} (it may take a minute to arrive).`;
+    if (emailInput) emailInput.value = "";
+  } catch (err) {
+    if (statusEl) statusEl.textContent = `⚠️ ${err.message}`;
+  } finally {
+    setBusy(btn, false, "📧 Send to Email");
   }
 }
 
