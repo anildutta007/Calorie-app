@@ -186,8 +186,19 @@ function enterApp() {
   profileGate.style.display = "none";
   appMain.style.display = "block";
   currentProfileName.textContent = currentProfile.name;
+  loadAppVersion();
   loadDailyGreeting();
   Promise.all([loadBio(), loadTargets()]).then(loadToday);
+}
+
+async function loadAppVersion() {
+  try {
+    const res = await fetch("/api/version");
+    if (!res.ok) return;
+    const { version } = await res.json();
+    const el = document.getElementById("app-version");
+    if (el && version) el.textContent = `v${version}`;
+  } catch { /* non-critical — silently ignore */ }
 }
 
 // ── Daily greeting quote ──────────────────────────────────────────────────────

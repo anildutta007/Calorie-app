@@ -596,6 +596,10 @@ app.get("/api/health", (req, res) => {
   res.json({ ok: true, apiKeyConfigured: Boolean(process.env.ANTHROPIC_API_KEY) });
 });
 
+app.get("/api/version", (req, res) => {
+  res.json({ version: require("./package.json").version });
+});
+
 // When run directly (npm start, or Render), start a normal listening server.
 // When imported by Vercel's serverless runtime, just export the app instead.
 if (require.main === module) {
