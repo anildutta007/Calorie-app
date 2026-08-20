@@ -619,14 +619,18 @@ input[type="file"] {
 #print-view { display: none; }
 
 @media print {
-  /* Hide the app UI, show only the print view */
-  body * { visibility: hidden; }
-  #print-view, #print-view * { visibility: visible; }
+  /* Remove app UI from layout entirely.
+     visibility:hidden keeps elements in flow → browser paginates over
+     their height → blank pages.  display:none eliminates them. */
+  html, body { height: auto !important; overflow: visible !important; }
+  #profile-gate,
+  #app-main   { display: none !important; }
+
   #print-view {
     display: block !important;
-    position: absolute;
-    top: 0; left: 0;
     width: 100%;
+    margin: 0;
+    padding: 0;
   }
 
   /* Landscape for the whole document */
