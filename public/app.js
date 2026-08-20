@@ -699,8 +699,9 @@ async function loadToday() {
     const data = await res.json();
     hideDbBanner();
     renderTotals(document.getElementById("today-totals"), data.total, document.getElementById("today-summary"));
-    renderDayTimeline(document.getElementById("today-list"), data.meals, true, loadToday, true);
+    renderClockView(document.getElementById("today-clock"), data.meals);
     renderAllFlags(document.getElementById("today-flags"), data.meals);
+    renderMealList(document.getElementById("today-list"), data.meals, true);
   } catch (err) {
     showDbBanner(loadToday);
   }
@@ -709,6 +710,152 @@ async function loadToday() {
 function renderAllFlags(container, meals) {
   const flags = meals.flatMap((m) => m.portion_flags || []);
   container.innerHTML = flags.length ? renderFlags(flags) : "";
+}
+
+// ── 24-hour clock view (Today tab) ───────────────────────────────────────────
+const CLOCK_COLORS = ["#4caf87", "#f0a500", "#5b9ef7", "#b06fd8", "#e67e5a", "#52c4c4"];
+
+function renderClockView(container, meals) {
+  const CX = 150, CY = 150;
+  const BG_R    = 125;   // dark background circle
+  const RING_R  = 107;   // radius where meal dot centres sit
+  const MDR     = 13;    // meal dot radius
+  const NOW_R   = 5;     // current-time marker radius
+  const LABEL_R = 139;   // cardinal label radius
+
+  function timeAngle(totalMins) {
+    // midnight = top (−π/2), clockwise
+    return (totalMins / 1440) * 2 * Math.PI - Math.PI / 2;
+  }
+  function px(ang, r) { return CX + Math.cos(ang) * r; }
+  function py(ang, r) { return CY + Math.sin(ang) * r; }
+
+  // Current time
+  const now     = new Date();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const nowAng  = timeAngle(nowMins);
+  const nowX    = px(nowAng, RING_R), nowY = py(nowAng, RING_R);
+
+  // Total calories
+  const totalCals = Math.round(meals.reduce((s, m) => s + (m.calories || 0), 0));
+
+  // Build per-meal info
+  const entries = meals.map((m, i) => {
+    const d    = new Date(m.created_at);
+    const mins = d.getHours() * 60 + d.getMinutes();
+    const ang  = timeAngle(mins);
+    return {
+      m, ang, mins,
+      x: px(ang, RING_R), y: py(ang, RING_R),
+      color:   CLOCK_COLORS[i % CLOCK_COLORS.length],
+      label:   ((m.description || "?").trim()[0] || "?").toUpperCase(),
+      timeStr: d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      cals:    Math.round(m.calories || 0),
+    };
+  });
+
+  // Eating-window sector (first meal → now)
+  let sectorSvg = "";
+  if (entries.length && nowMins > Math.min(...entries.map(e => e.mins)) + 10) {
+    const firstMins = Math.min(...entries.map(e => e.mins));
+    const firstAng  = timeAngle(firstMins);
+    const spanMins  = nowMins - firstMins;
+    const large     = spanMins > 720 ? 1 : 0;
+    sectorSvg = `<path d="M ${CX} ${CY} L ${px(firstAng, RING_R)} ${py(firstAng, RING_R)}
+      A ${RING_R} ${RING_R} 0 ${large} 1 ${nowX} ${nowY} Z"
+      fill="rgba(47,111,79,0.22)" />`;
+  }
+
+  // Hour ticks (24 spokes)
+  let ticks = "";
+  for (let h = 0; h < 24; h++) {
+    const ang   = timeAngle(h * 60);
+    const major = h % 6 === 0;
+    const r1    = major ? BG_R - 15 : BG_R - 8;
+    ticks += `<line x1="${px(ang, r1)}" y1="${py(ang, r1)}"
+      x2="${px(ang, BG_R)}" y2="${py(ang, BG_R)}"
+      stroke="${major ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.14)"}"
+      stroke-width="${major ? 1.5 : 0.8}" />`;
+  }
+
+  // Cardinal labels
+  const LABS = [
+    { h: 0,  t: "12am", anchor: "middle", base: "auto"    },
+    { h: 6,  t: "6am",  anchor: "start",  base: "middle"  },
+    { h: 12, t: "12pm", anchor: "middle", base: "hanging" },
+    { h: 18, t: "6pm",  anchor: "end",    base: "middle"  },
+  ];
+  const labsSvg = LABS.map(({ h, t, anchor, base }) => {
+    const ang = timeAngle(h * 60);
+    return `<text x="${px(ang, LABEL_R)}" y="${py(ang, LABEL_R)}"
+      text-anchor="${anchor}" dominant-baseline="${base}"
+      font-size="9" fill="rgba(255,255,255,0.55)"
+      font-family="system-ui,-apple-system,sans-serif">${t}</text>`;
+  }).join("");
+
+  // Dashed line: centre → now
+  const dashLine = `<line x1="${CX}" y1="${CY}" x2="${nowX}" y2="${nowY}"
+    stroke="rgba(255,255,255,0.35)" stroke-width="1.2" stroke-dasharray="4,3" />`;
+
+  // Meal dots
+  const dots = entries.map(e => `
+    <circle cx="${e.x}" cy="${e.y}" r="${MDR}" fill="${e.color}" />
+    <text x="${e.x}" y="${e.y}" text-anchor="middle" dominant-baseline="central"
+      font-size="10" font-weight="700" fill="white"
+      font-family="system-ui,-apple-system,sans-serif">${e.label}</text>`).join("");
+
+  // Now marker
+  const nowDot = `<circle cx="${nowX}" cy="${nowY}" r="${NOW_R}" fill="white" />`;
+
+  // Centre text
+  const centre = `
+    <text x="${CX}" y="${CY - 14}" text-anchor="middle" dominant-baseline="auto"
+      font-size="8.5" fill="rgba(255,255,255,0.6)" letter-spacing="1.2"
+      font-family="system-ui,-apple-system,sans-serif">TODAY</text>
+    <text x="${CX}" y="${CY + 8}" text-anchor="middle" dominant-baseline="auto"
+      font-size="26" font-weight="700" fill="white"
+      font-family="system-ui,-apple-system,sans-serif">${totalCals.toLocaleString()}</text>
+    <text x="${CX}" y="${CY + 26}" text-anchor="middle" dominant-baseline="hanging"
+      font-size="9" fill="rgba(255,255,255,0.5)"
+      font-family="system-ui,-apple-system,sans-serif">kcal</text>`;
+
+  // Legend (2-column grid below the clock)
+  const legendHtml = entries.length
+    ? `<div class="clock-legend">${entries.map(e => `
+        <div class="clock-legend-item">
+          <span class="clock-legend-dot" style="background:${e.color}"></span>
+          <div class="clock-legend-info">
+            <div class="clock-legend-name">${escapeHtml(e.m.description)}</div>
+            <div class="clock-legend-meta">${e.timeStr} &middot; ${e.cals} kcal</div>
+          </div>
+        </div>`).join("")}</div>`
+    : `<div class="clock-empty-msg">No meals logged today — start logging to see your day on the clock.</div>`;
+
+  container.innerHTML = `
+    <svg viewBox="-12 -12 324 324"
+         style="width:100%;max-width:300px;display:block;margin:0 auto;overflow:visible"
+         role="img" aria-label="24-hour meal clock">
+      <!-- dark background -->
+      <circle cx="${CX}" cy="${CY}" r="${BG_R}" fill="#0b1f13" />
+      <!-- eating-window sector -->
+      ${sectorSvg}
+      <!-- hour ticks -->
+      ${ticks}
+      <!-- outer ring hairline -->
+      <circle cx="${CX}" cy="${CY}" r="${BG_R}" fill="none"
+        stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+      <!-- cardinal labels -->
+      ${labsSvg}
+      <!-- dashed centre-to-now line -->
+      ${dashLine}
+      <!-- meal dots -->
+      ${dots}
+      <!-- current-time marker (drawn last = on top) -->
+      ${nowDot}
+      <!-- centre text -->
+      ${centre}
+    </svg>
+    ${legendHtml}`;
 }
 
 // Today/History show the 4 daily totals as a big calorie progress bar plus
@@ -818,6 +965,7 @@ function renderMealList(container, meals, showEdit) {
 
   container.querySelectorAll(".delete-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
+      if (!confirm("Delete this meal?")) return;
       await fetch(`/api/meals/${btn.dataset.id}`, { method: "DELETE", headers: profileHeaders() });
       loadToday();
       loadHistory();
