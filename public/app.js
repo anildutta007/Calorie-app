@@ -1386,57 +1386,138 @@ async function downloadPlanPdf(btn) {
   }
 }
 
+// Canonical meal-type sort order for the calendar rows
+const MEAL_TYPE_ORDER = [
+  "breakfast", "morning snack", "mid-morning snack",
+  "snack", "pre-workout", "lunch",
+  "afternoon snack", "evening snack", "dinner", "post-dinner"
+];
+
+function mealTypeSortKey(type) {
+  const lower = type.toLowerCase();
+  const idx = MEAL_TYPE_ORDER.findIndex((t) => lower.includes(t) || t.includes(lower));
+  return idx === -1 ? 99 : idx;
+}
+
 function buildPrintView(mealPlan, recipes) {
   const dietLabel = mealPlan.diet === "veg" ? "Vegetarian" : "Non-Vegetarian";
-  const proteins = mealPlan.included_proteins || [];
-  const proteinLabel = proteins.length ? ` (+ ${proteins.map(cap).join(", ")})` : mealPlan.diet === "veg" ? " (strict)" : "";
+  const proteins  = mealPlan.included_proteins || [];
+  const proteinLabel = proteins.length
+    ? ` + ${proteins.map(cap).join(", ")}`
+    : mealPlan.diet === "veg" ? " (strict)" : "";
+  const days = mealPlan.days;
 
-  const daysHtml = mealPlan.days
-    .map(
-      (day) => `
-    <div class="print-day">
-      <h2>${escapeHtml(day.day_label || `Day ${day.day_number}`)}</h2>
-      ${day.meals
-        .map(
-          (meal) => `
-        <h3>${escapeHtml(cap(meal.meal_type))}</h3>
-        ${meal.items.map((it) => renderPrintItem(it, recipes[it.name], pdfIncludedDishes.has(it.name))).join("")}
-      `
-        )
-        .join("")}
-      <div class="print-day-totals">
-        Day total: ${Math.round(day.day_totals.calories)} kcal · ${round1(day.day_totals.protein_g)}g protein · ${round1(day.day_totals.carbs_g)}g carbs · ${round1(day.day_totals.fat_g)}g fat
-      </div>
-    </div>`
-    )
+  // ── Page 1: calendar grid ─────────────────────────────────────────────
+
+  // Collect unique meal types in canonical order
+  const mealTypeSet = new Set();
+  days.forEach((day) => day.meals.forEach((m) => mealTypeSet.add(m.meal_type)));
+  const mealTypes = [...mealTypeSet].sort(
+    (a, b) => mealTypeSortKey(a) - mealTypeSortKey(b)
+  );
+
+  // Build lookup: dayIndex → mealType(lower) → items[]
+  const mealMap = days.map((day) => {
+    const m = {};
+    day.meals.forEach((meal) => { m[meal.meal_type] = meal.items; });
+    return m;
+  });
+
+  // Header row — one <th> per day
+  const headerCells = days
+    .map((d) => `<th class="cal-day-header">${escapeHtml(d.day_label || `Day ${d.day_number}`)}</th>`)
     .join("");
 
+  // Body rows — one <tr> per meal type
+  const bodyRows = mealTypes
+    .map((mealType) => {
+      const cells = days
+        .map((_, di) => {
+          const items = mealMap[di][mealType] || [];
+          const content = items.length
+            ? items.map((it) => `<div class="cal-dish">${escapeHtml(it.name)}</div>`).join("")
+            : `<span class="cal-empty">—</span>`;
+          return `<td>${content}</td>`;
+        })
+        .join("");
+      return `<tr><th class="meal-type-cell">${escapeHtml(cap(mealType))}</th>${cells}</tr>`;
+    })
+    .join("");
+
+  // Totals footer row
+  const totalCells = days
+    .map((d) => {
+      const t = d.day_totals;
+      return `<td class="cal-totals-cell">${Math.round(t.calories)} kcal<br>${round1(t.protein_g)}g P · ${round1(t.carbs_g)}g C · ${round1(t.fat_g)}g F</td>`;
+    })
+    .join("");
+
+  // ── Page 2+: recipe cards for selected dishes ─────────────────────────
+  const recipeDishes = [...pdfIncludedDishes].filter((name) => recipes[name]);
+  const recipesHtml = recipeDishes.length
+    ? `<div class="print-recipes-section">
+        <h2 class="print-recipes-heading">Recipes</h2>
+        ${recipeDishes.map((name) => renderPrintRecipe(name, recipes[name])).join("")}
+      </div>`
+    : "";
+
   document.getElementById("print-view").innerHTML = `
-    <h1>🍽️ 7-Day Indian Meal Plan</h1>
-    <div class="print-meta">Target: ${Math.round(mealPlan.calorie_target)} kcal · ${Math.round(mealPlan.protein_target)}g protein/day · ${dietLabel}${proteinLabel}</div>
-    ${mealPlan.summary ? `<p>${escapeHtml(mealPlan.summary)}</p>` : ""}
-    ${daysHtml}
+    <div class="print-calendar-section">
+      <div class="print-cal-header">
+        <div class="print-cal-title">🍽️ ${days.length}-Day Indian Meal Plan · ${dietLabel}${proteinLabel}</div>
+        <div class="print-cal-meta">Target: ${Math.round(mealPlan.calorie_target)} kcal · ${Math.round(mealPlan.protein_target)}g protein/day</div>
+      </div>
+      ${mealPlan.summary ? `<p class="print-cal-summary">${escapeHtml(mealPlan.summary)}</p>` : ""}
+      <table class="meal-calendar">
+        <thead>
+          <tr>
+            <th class="meal-type-cell meal-type-header">Meal</th>
+            ${headerCells}
+          </tr>
+        </thead>
+        <tbody>
+          ${bodyRows}
+          <tr class="cal-totals-row">
+            <th class="meal-type-cell">Daily totals</th>
+            ${totalCells}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    ${recipesHtml}
   `;
 }
 
-// includeRecipe = true only for dishes the user ticked the PDF checkbox on
-function renderPrintItem(item, recipe, includeRecipe) {
-  const imageHtml = includeRecipe && recipe && recipe.image_url
-    ? `<img src="${escapeHtml(recipe.image_url)}" class="print-recipe-photo" />` : "";
-  const ingredientsHtml = includeRecipe && recipe && recipe.ingredients && recipe.ingredients.length
-    ? `<ul>${recipe.ingredients.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>` : "";
-  const stepsHtml = includeRecipe && recipe && recipe.steps && recipe.steps.length
-    ? `<ol>${recipe.steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>` : "";
+// Recipe card for page 2+ (selected dishes only)
+function renderPrintRecipe(name, recipe) {
+  const imageHtml = recipe.image_url
+    ? `<img src="${escapeHtml(recipe.image_url)}" class="print-recipe-photo" alt="${escapeHtml(name)}" />`
+    : "";
+  const meta = [
+    recipe.serves        ? `Serves ${recipe.serves}` : "",
+    recipe.prep_time_min ? `Prep ${recipe.prep_time_min} min` : "",
+    recipe.cook_time_min ? `Cook ${recipe.cook_time_min} min` : "",
+  ].filter(Boolean).join(" · ");
+  const ingredientsHtml = recipe.ingredients?.length
+    ? `<div class="print-recipe-block"><strong>Ingredients</strong><ul>${recipe.ingredients.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul></div>`
+    : "";
+  const stepsHtml = recipe.steps?.length
+    ? `<div class="print-recipe-block"><strong>Method</strong><ol>${recipe.steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol></div>`
+    : "";
   return `
-    <div class="print-item">
-      <div class="print-item-header">
+    <div class="print-recipe-card">
+      <div class="print-recipe-header">
         ${imageHtml}
-        <div><strong>${escapeHtml(item.name)}</strong> — ${escapeHtml(item.portion_desc)} · ${Math.round(item.calories)} kcal</div>
+        <div>
+          <div class="print-recipe-name">${escapeHtml(name)}</div>
+          ${meta ? `<div class="print-recipe-meta">${meta}</div>` : ""}
+        </div>
       </div>
-      ${ingredientsHtml}
-      ${stepsHtml}
-    </div>
-  `;
+      <div class="print-recipe-body">
+        ${ingredientsHtml}
+        ${stepsHtml}
+      </div>
+    </div>`;
 }
 
 // --- Weight Goal tab ---

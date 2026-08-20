@@ -619,56 +619,111 @@ input[type="file"] {
 #print-view { display: none; }
 
 @media print {
+  /* Hide the app UI, show only the print view */
   body * { visibility: hidden; }
   #print-view, #print-view * { visibility: visible; }
   #print-view {
-    display: block;
+    display: block !important;
     position: absolute;
-    top: 0;
-    left: 0;
+    top: 0; left: 0;
     width: 100%;
   }
 
-  @page { margin: 1.5cm; }
+  /* Landscape for the whole document */
+  @page { size: landscape; margin: 12mm; }
 
-  #print-view h1 { font-size: 1.4rem; margin-bottom: 4px; }
-  #print-view .print-meta { color: #555; font-size: 0.85rem; margin-bottom: 12px; }
-  #print-view .print-day { margin-top: 20px; }
-  #print-view .print-day h2 {
-    font-size: 1.1rem;
-    border-bottom: 2px solid #333;
-    padding-bottom: 4px;
+  /* ── Page 1: calendar header ── */
+  .print-cal-header   { margin-bottom: 5pt; }
+  .print-cal-title    { font-size: 13pt; font-weight: 700; }
+  .print-cal-meta     { font-size: 8.5pt; color: #555; margin-top: 1pt; }
+  .print-cal-summary  { font-size: 8.5pt; font-style: italic; margin: 4pt 0 6pt; }
+
+  /* ── Calendar table ── */
+  .meal-calendar {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 8pt;
+    margin-top: 6pt;
   }
-  #print-view .print-day h3 { font-size: 0.9rem; margin: 12px 0 4px; text-transform: uppercase; }
-  #print-view .print-item {
+  .meal-calendar th,
+  .meal-calendar td {
+    border: 0.5pt solid #aaa;
+    padding: 4pt 5pt;
+    vertical-align: top;
+    word-break: break-word;
+  }
+  /* Meal-type column (first column) */
+  .meal-type-cell {
+    width: 62pt;
+    min-width: 62pt;
+    background: #e6f2ec;
+    font-weight: 700;
+    font-size: 7pt;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #1a4a2e;
+    text-align: left;
+  }
+  /* Top-left corner header */
+  .meal-type-header {
+    background: #1a4a2e !important;
+    color: white !important;
+  }
+  /* Day header cells */
+  .cal-day-header {
+    background: #2f6f4f;
+    color: white;
+    text-align: center;
+    font-size: 7.5pt;
+    font-weight: 700;
+  }
+  /* Dish name entries in a cell */
+  .cal-dish {
+    line-height: 1.35;
+    margin-bottom: 1.5pt;
+  }
+  .cal-empty { color: #ccc; }
+  /* Totals row */
+  .cal-totals-row th { background: #f5f5f5 !important; }
+  .cal-totals-cell   { font-size: 7pt; color: #333; line-height: 1.45; }
+
+  /* ── Page 2+: recipes ── */
+  .print-recipes-section  { page-break-before: always; }
+  .print-recipes-heading  {
+    font-size: 14pt;
+    font-weight: 700;
+    border-bottom: 1.5pt solid #2f6f4f;
+    padding-bottom: 4pt;
+    margin-bottom: 12pt;
+  }
+  .print-recipe-card {
     page-break-inside: avoid;
-    margin-bottom: 10px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #ddd;
+    margin-bottom: 14pt;
+    padding-bottom: 12pt;
+    border-bottom: 0.5pt solid #ddd;
   }
-  #print-view .print-item-header {
+  .print-recipe-header {
     display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 4px;
+    gap: 8pt;
+    align-items: flex-start;
+    margin-bottom: 5pt;
   }
-  #print-view .print-recipe-photo {
-    width: 60px;
-    height: 60px;
+  .print-recipe-photo {
+    width: 64pt;
+    height: 64pt;
     object-fit: cover;
-    border-radius: 6px;
+    border-radius: 3pt;
     flex-shrink: 0;
   }
-  #print-view .print-item ul, #print-view .print-item ol {
-    margin: 4px 0 0 0;
-    padding-left: 20px;
-    font-size: 0.85rem;
-  }
-  #print-view .print-day-totals {
-    font-weight: 600;
-    margin-top: 8px;
-    font-size: 0.9rem;
-  }
+  .print-recipe-name { font-size: 11pt; font-weight: 700; margin-bottom: 2pt; }
+  .print-recipe-meta { font-size: 8pt; color: #555; }
+  .print-recipe-body { display: flex; gap: 16pt; }
+  .print-recipe-block { flex: 1; font-size: 8.5pt; }
+  .print-recipe-block strong { display: block; margin-bottom: 2pt; }
+  .print-recipe-block ul,
+  .print-recipe-block ol  { margin: 0; padding-left: 12pt; }
+  .print-recipe-block li  { margin-bottom: 2pt; line-height: 1.35; }
 }
 
 /* --- Daily targets, color-coded totals, day summary --- */
