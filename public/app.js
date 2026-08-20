@@ -207,15 +207,17 @@ async function loadDailyGreeting() {
   const cacheKey = `daily-quote-v1-${currentProfile.id}-${today}`;
   const cached = localStorage.getItem(cacheKey);
 
+  const salutation = `${timeOfDay()}, ${currentProfile.name}! 👋`;
+
   // Show shimmer while loading
   greetingEl.innerHTML = `
-    <div class="greeting-time">${timeOfDay()}, ${currentProfile.name}! 👋</div>
+    <div class="greeting-time">${salutation}</div>
     <div class="greeting-shimmer"></div>`;
-  greetingEl.style.display = "block";
+  greetingEl.style.display = "flex";
 
   if (cached) {
     greetingEl.innerHTML = `
-      <div class="greeting-time">${timeOfDay()}, ${currentProfile.name}! 👋</div>
+      <div class="greeting-time">${salutation}</div>
       <div class="greeting-quote">${cached}</div>`;
     return;
   }
@@ -229,7 +231,7 @@ async function loadDailyGreeting() {
     const { quote } = await res.json();
     localStorage.setItem(cacheKey, quote);
     greetingEl.innerHTML = `
-      <div class="greeting-time">${timeOfDay()}, ${currentProfile.name}! 👋</div>
+      <div class="greeting-time">${salutation}</div>
       <div class="greeting-quote">${quote}</div>`;
   } catch {
     // Silently hide if the API call fails — don't disrupt the app
