@@ -1320,60 +1320,6 @@ input[type="file"] {
 }
 .db-banner-btn:hover { background: #92400e; }
 
-/* ── Clock view (Today tab) ──────────────────────────────── */
-#today-clock-card {
-  padding: 16px 12px 12px;
-}
-
-.clock-legend {
-  margin-top: 14px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px 12px;
-  padding: 0 4px;
-}
-
-.clock-legend-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.clock-legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  margin-top: 3px;
-}
-
-.clock-legend-info {
-  min-width: 0;
-}
-
-.clock-legend-name {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.clock-legend-meta {
-  font-size: 0.75rem;
-  color: var(--muted);
-  margin-top: 1px;
-}
-
-.clock-empty-msg {
-  text-align: center;
-  font-size: 0.83rem;
-  color: var(--muted);
-  padding: 6px 0 4px;
-  line-height: 1.4;
-}
-
 /* ── 24-hour day timeline (Today tab) ───────────────────── */
 
 .day-timeline {
