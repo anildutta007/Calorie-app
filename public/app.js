@@ -186,6 +186,7 @@ function enterApp() {
   profileGate.style.display = "none";
   appMain.style.display = "block";
   currentProfileName.textContent = currentProfile.name;
+  resetLogTimes();
   loadAppVersion();
   loadDailyGreeting();
   Promise.all([loadBio(), loadTargets()]).then(loadToday);
@@ -268,6 +269,7 @@ tabButtons.forEach((btn) => {
     tabs.forEach((t) => t.classList.remove("active"));
     btn.classList.add("active");
     document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
+    if (btn.dataset.tab === "log") resetLogTimes();
     if (btn.dataset.tab === "today") loadToday();
     if (btn.dataset.tab === "history") loadHistory();
     if (btn.dataset.tab === "plan") loadMealPlan();
@@ -344,6 +346,35 @@ function stopRecording() {
   try { recognition.stop(); } catch (e) {}
 }
 
+// ── Meal-time helpers ──────────────────────────────────────────────────────
+// Returns current time as "HH:MM" for pre-filling <input type="time">
+function nowTimeStr() {
+  const n = new Date();
+  return `${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`;
+}
+
+// Converts an <input type="time"> value (HH:MM, local) to an ISO timestamp.
+// Falls back to right-now if the input is empty or missing.
+function mealTimeIso(inputEl) {
+  const val = inputEl ? inputEl.value : "";
+  if (!val) return new Date().toISOString();
+  const [h, m] = val.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
+
+const logMealTimeInput   = document.getElementById("log-meal-time");
+const photoMealTimeInput = document.getElementById("photo-meal-time");
+const editMealTimeInput  = document.getElementById("edit-meal-time");
+
+// Initialise both log-tab time inputs to "now"
+function resetLogTimes() {
+  const t = nowTimeStr();
+  if (logMealTimeInput)   logMealTimeInput.value   = t;
+  if (photoMealTimeInput) photoMealTimeInput.value = t;
+}
+
 // --- Text analysis ---
 const analyzeTextBtn = document.getElementById("analyze-text-btn");
 analyzeTextBtn.addEventListener("click", async () => {
@@ -354,12 +385,13 @@ analyzeTextBtn.addEventListener("click", async () => {
     const res = await fetch("/api/meals/text", {
       method: "POST",
       headers: profileHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, meal_time_iso: mealTimeIso(logMealTimeInput) }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to analyze.");
     showResult(data);
     voiceText.value = "";
+    resetLogTimes();
   } catch (err) {
     showError(err.message);
   } finally {
@@ -417,6 +449,7 @@ analyzePhotoBtn.addEventListener("click", async () => {
     const formData = new FormData();
     formData.append("photo", uploadFile, "photo.jpg");
     formData.append("caption", photoCaption.value.trim());
+    formData.append("meal_time_iso", mealTimeIso(photoMealTimeInput));
     const res = await fetch("/api/meals/photo", { method: "POST", headers: profileHeaders(), body: formData });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to analyze.");
@@ -426,6 +459,7 @@ analyzePhotoBtn.addEventListener("click", async () => {
     photoPreview.style.display = "none";
     selectedFile = null;
     analyzePhotoBtn.disabled = true;
+    resetLogTimes();
   } catch (err) {
     showError(err.message || "Upload failed - try a smaller photo or check your connection.");
   } finally {
@@ -975,6 +1009,11 @@ function openEditMealModal(meal) {
   editingMealId = meal.id;
   editMealError.style.display = "none";
   editMealDescriptionInput.value = meal.description;
+  // Pre-fill the time from the original created_at (local HH:MM)
+  if (editMealTimeInput && meal.created_at) {
+    const d = new Date(meal.created_at);
+    editMealTimeInput.value = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
   editMealItemsContainer.innerHTML = "";
   meal.items.forEach((it) => editMealItemsContainer.appendChild(buildEditItemRow(it)));
   editMealModal.style.display = "flex";
@@ -1030,7 +1069,7 @@ editMealSaveBtn.addEventListener("click", async () => {
     const res = await fetch(`/api/meals/${editingMealId}`, {
       method: "PUT",
       headers: profileHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ description, items }),
+      body: JSON.stringify({ description, items, meal_time_iso: mealTimeIso(editMealTimeInput) }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to save changes.");

@@ -84,16 +84,28 @@ function sumTotals(items) {
   );
 }
 
-async function saveMealFromAnalysis(analysis, source, rawInput, profileId) {
+// Validate an ISO timestamp sent from the client for use as meal_time_iso.
+// Returns the cleaned ISO string, or null if invalid / too far in the future.
+function parseMealTimeIso(raw) {
+  if (!raw) return null;
+  const d = new Date(String(raw));
+  if (isNaN(d.getTime())) return null;
+  // Reject timestamps more than 2 minutes in the future (clock skew tolerance)
+  if (d.getTime() > Date.now() + 2 * 60 * 1000) return null;
+  return d.toISOString();
+}
+
+async function saveMealFromAnalysis(analysis, source, rawInput, profileId, mealTimeIso) {
   const items = analysis.items || [];
   // Always compute totals from items so nutrient fields are included (Claude's
   // tool response "total" only covers the 4 main macros, not fiber/sugar/etc).
   const total = sumTotals(items);
   const flags = buildFlags(items);
-  const date = todayDate();
+  const created_at = parseMealTimeIso(mealTimeIso) || new Date().toISOString();
+  const date = created_at.slice(0, 10);
 
   return insertMeal({
-    created_at: new Date().toISOString(),
+    created_at,
     date,
     source,
     raw_input: rawInput || null,
@@ -232,10 +244,10 @@ app.post("/api/profile/targets/calculate", async (req, res) => {
 
 app.post("/api/meals/text", async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, meal_time_iso } = req.body;
     if (!text || !text.trim()) return res.status(400).json({ error: "Missing 'text'." });
     const analysis = await analyzeMealText(text.trim());
-    const meal = await saveMealFromAnalysis(analysis, "voice", text.trim(), req.profileId);
+    const meal = await saveMealFromAnalysis(analysis, "voice", text.trim(), req.profileId, meal_time_iso);
     res.json(meal);
   } catch (err) {
     console.error(err);
@@ -247,11 +259,12 @@ app.post("/api/meals/photo", upload.single("photo"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "Missing 'photo' file." });
     const caption = (req.body.caption || "").trim();
+    const meal_time_iso = req.body.meal_time_iso || null;
     const base64 = req.file.buffer.toString("base64");
     const mediaType = req.file.mimetype || "image/jpeg";
 
     const analysis = await analyzeMealPhoto(base64, mediaType, caption || null);
-    const meal = await saveMealFromAnalysis(analysis, "photo", caption || null, req.profileId);
+    const meal = await saveMealFromAnalysis(analysis, "photo", caption || null, req.profileId, meal_time_iso);
     res.json(meal);
   } catch (err) {
     console.error(err);
@@ -324,6 +337,10 @@ app.put("/api/meals/:id", async (req, res) => {
     const total = sumTotals(estimatedItems);
     const flags = buildFlags(estimatedItems);
 
+    // Allow editing the logged time (fixes bug where edit appeared to reset
+    // the time, and adds feature for retrospective time correction).
+    const meal_time_iso = parseMealTimeIso(req.body.meal_time_iso);
+
     const updated = await updateMeal(Number(req.params.id), req.profileId, {
       description,
       items_json: JSON.stringify(estimatedItems),
@@ -336,6 +353,7 @@ app.put("/api/meals/:id", async (req, res) => {
       sodium_mg: total.sodium_mg,
       saturated_fat_g: total.saturated_fat_g,
       portion_flags_json: JSON.stringify(flags),
+      ...(meal_time_iso ? { created_at: meal_time_iso, date: meal_time_iso.slice(0, 10) } : {}),
     });
     if (!updated) return res.status(404).json({ error: "Meal not found." });
     res.json(updated);

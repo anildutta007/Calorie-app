@@ -95,6 +95,10 @@
           <span id="mic-status" class="muted"></span>
         </div>
         <textarea id="voice-text" placeholder="Your spoken description will appear here — or just type what you ate."></textarea>
+        <div class="meal-time-row">
+          <label for="log-meal-time">🕐 Time eaten</label>
+          <input type="time" id="log-meal-time" />
+        </div>
         <button id="analyze-text-btn" class="primary-btn">Analyze &amp; Log</button>
       </div>
 
@@ -103,6 +107,10 @@
         <input id="photo-input" type="file" accept="image/*" capture="environment" />
         <img id="photo-preview" class="photo-preview" style="display:none" />
         <input id="photo-caption" type="text" placeholder="Optional note (e.g. 'no dressing on the salad')" />
+        <div class="meal-time-row">
+          <label for="photo-meal-time">🕐 Time eaten</label>
+          <input type="time" id="photo-meal-time" />
+        </div>
         <button id="analyze-photo-btn" class="primary-btn" disabled>Analyze &amp; Log</button>
       </div>
 
@@ -263,6 +271,8 @@
       <h2>Edit Meal</h2>
       <label for="edit-meal-description">Description</label>
       <input type="text" id="edit-meal-description" placeholder="Short summary of the meal" />
+      <label for="edit-meal-time">🕐 Time logged</label>
+      <input type="time" id="edit-meal-time" />
       <div id="edit-meal-items"></div>
       <button id="edit-meal-add-item-btn" class="secondary-btn" type="button">+ Add Item</button>
       <button id="edit-meal-save-btn" class="primary-btn" type="button">Save Changes</button>

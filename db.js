@@ -229,12 +229,17 @@ async function deleteMeal(id, profileId) {
 
 async function updateMeal(id, profileId, meal) {
   await init();
+  // created_at and date: use COALESCE so that when the caller provides a value
+  // (time-edit feature) it is stored, and when it doesn't the existing DB value
+  // is preserved (prevents the edit-resets-time bug).
   const rows = await sql`
     UPDATE meals
     SET description = ${meal.description}, items_json = ${meal.items_json},
         calories = ${meal.calories}, protein_g = ${meal.protein_g}, carbs_g = ${meal.carbs_g}, fat_g = ${meal.fat_g},
         fiber_g = ${meal.fiber_g || 0}, sugar_g = ${meal.sugar_g || 0}, sodium_mg = ${meal.sodium_mg || 0}, saturated_fat_g = ${meal.saturated_fat_g || 0},
-        portion_flags_json = ${meal.portion_flags_json}
+        portion_flags_json = ${meal.portion_flags_json},
+        created_at = COALESCE(${meal.created_at || null}, created_at),
+        date       = COALESCE(${meal.date       || null}, date)
     WHERE id = ${id} AND profile_id = ${profileId}
     RETURNING *
   `;
