@@ -64,7 +64,7 @@ just give your best estimate and keep portions realistic. Sum item values into a
 async function analyzeMealText(text) {
   const anthropic = getClient();
   const msg = await anthropic.messages.create({
-    model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
+    model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
     max_tokens: 1500,
     system: SYSTEM_PROMPT,
     tools: [NUTRITION_TOOL],
@@ -86,7 +86,7 @@ async function analyzeMealPhoto(base64Image, mediaType, captionText) {
     : `This is a photo of my plate. Identify each food item, estimate portions (use the plate/utensils for scale), and estimate nutrition.`;
 
   const msg = await anthropic.messages.create({
-    model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
+    model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
     max_tokens: 1500,
     system: SYSTEM_PROMPT,
     tools: [NUTRITION_TOOL],
@@ -165,7 +165,7 @@ realistic estimator - don't refuse due to uncertainty.`;
 async function estimateItemMacros(items) {
   const anthropic = getClient();
   const msg = await anthropic.messages.create({
-    model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
+    model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
     max_tokens: 2000,
     system: ESTIMATE_MACROS_SYSTEM_PROMPT,
     tools: [ESTIMATE_MACROS_TOOL],

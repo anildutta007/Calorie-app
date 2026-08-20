@@ -122,7 +122,7 @@ async function generateMealPlan(calorieTarget, proteinTarget, diet, includedProt
     : "";
 
   const msg = await anthropic.messages.create({
-    model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
+    model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
     max_tokens: 8000,
     system: SYSTEM_PROMPT,
     tools: [buildMealPlanTool(dayCount)],

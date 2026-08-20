@@ -49,7 +49,7 @@ generate_recipes tool with exactly one entry per dish, in the SAME ORDER as give
 async function generateRecipesBatch(dishNames) {
   const anthropic = getClient();
   const msg = await anthropic.messages.create({
-    model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
+    model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
     max_tokens: 8000,
     system: SYSTEM_PROMPT,
     tools: [RECIPE_TOOL],

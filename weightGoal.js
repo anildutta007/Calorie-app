@@ -133,7 +133,7 @@ async function generateExercisePlan({ weightToLose_kg, age, activity, sex, bmi }
     : "is already at their ideal weight but wants to stay fit";
 
   const msg = await anthropic.messages.create({
-    model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
+    model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
     max_tokens: 2000,
     tools: [EXERCISE_TOOL],
     tool_choice: { type: "tool", name: "create_exercise_plan" },
