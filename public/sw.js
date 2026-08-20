@@ -10,7 +10,7 @@
 // serve stale files after every deploy.  Network-first means updates are
 // visible immediately while the app still loads when the user is offline.
 
-const CACHE = "dutta-v2"; // bump this whenever the SW logic itself changes
+const CACHE = "dutta-v3"; // bumped for new colourful icon
 
 const SHELL = [
   "/",

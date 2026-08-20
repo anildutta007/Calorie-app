@@ -4,7 +4,7 @@
   "description": "Track Indian meals, plan your week, and reach your ideal weight.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0d2018",
+  "background_color": "#F97316",
   "theme_color": "#2f6f4f",
   "orientation": "portrait-primary",
   "lang": "en",
