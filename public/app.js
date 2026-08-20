@@ -186,7 +186,55 @@ function enterApp() {
   profileGate.style.display = "none";
   appMain.style.display = "block";
   currentProfileName.textContent = currentProfile.name;
+  loadDailyGreeting();
   Promise.all([loadBio(), loadTargets()]).then(loadToday);
+}
+
+// ── Daily greeting quote ──────────────────────────────────────────────────────
+const greetingEl = document.getElementById("daily-greeting");
+
+function timeOfDay() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+async function loadDailyGreeting() {
+  if (!greetingEl) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const cacheKey = `daily-quote-v1-${currentProfile.id}-${today}`;
+  const cached = localStorage.getItem(cacheKey);
+
+  // Show shimmer while loading
+  greetingEl.innerHTML = `
+    <div class="greeting-time">${timeOfDay()}, ${currentProfile.name}! 👋</div>
+    <div class="greeting-shimmer"></div>`;
+  greetingEl.style.display = "block";
+
+  if (cached) {
+    greetingEl.innerHTML = `
+      <div class="greeting-time">${timeOfDay()}, ${currentProfile.name}! 👋</div>
+      <div class="greeting-quote">${cached}</div>`;
+    return;
+  }
+
+  try {
+    const res = await fetch(
+      `/api/daily-quote?name=${encodeURIComponent(currentProfile.name)}`,
+      { headers: profileHeaders() }
+    );
+    if (!res.ok) throw new Error("quote fetch failed");
+    const { quote } = await res.json();
+    localStorage.setItem(cacheKey, quote);
+    greetingEl.innerHTML = `
+      <div class="greeting-time">${timeOfDay()}, ${currentProfile.name}! 👋</div>
+      <div class="greeting-quote">${quote}</div>`;
+  } catch {
+    // Silently hide if the API call fails — don't disrupt the app
+    greetingEl.style.display = "none";
+  }
 }
 
 switchProfileBtn.addEventListener("click", () => {

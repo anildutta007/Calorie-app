@@ -107,6 +107,37 @@ nav {
   margin-bottom: 16px;
 }
 
+/* Daily greeting card */
+.greeting-card {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+  border-color: transparent;
+  color: white;
+  padding: 14px 16px;
+}
+.greeting-card .greeting-time {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.greeting-card .greeting-quote {
+  font-size: 0.95rem;
+  line-height: 1.45;
+  font-style: italic;
+}
+.greeting-card .greeting-shimmer {
+  height: 1em;
+  width: 80%;
+  background: rgba(255,255,255,0.2);
+  border-radius: 4px;
+  animation: shimmer 1.4s infinite ease-in-out;
+}
+@keyframes shimmer {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 0.9; }
+}
+
 .card h2 {
   font-size: 1rem;
   margin: 0 0 10px;

@@ -205,4 +205,18 @@ async function estimateItemMacros(items) {
   });
 }
 
-module.exports = { analyzeMealText, analyzeMealPhoto, getClient, extractToolResult, estimateItemMacros };
+// ── Daily motivational greeting ───────────────────────────────────────────────
+async function generateDailyQuote(name) {
+  const client = getClient();
+  const message = await client.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 100,
+    messages: [{
+      role: "user",
+      content: `Write one short, warm motivational sentence (max 25 words) to encourage ${name} to eat healthily today. Use their name naturally. Be specific and uplifting, not generic. Return ONLY the sentence — no quotes, no explanation.`
+    }]
+  });
+  return message.content[0].text.trim();
+}
+
+module.exports = { analyzeMealText, analyzeMealPhoto, getClient, extractToolResult, estimateItemMacros, generateDailyQuote };

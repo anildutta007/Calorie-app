@@ -22,7 +22,7 @@ const {
   setProfileBio,
   getProgressSummary,
 } = require("./db");
-const { analyzeMealText, analyzeMealPhoto, estimateItemMacros } = require("./nutrition");
+const { analyzeMealText, analyzeMealPhoto, estimateItemMacros, generateDailyQuote } = require("./nutrition");
 const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mealplan");
 const { buildRecipePack } = require("./recipes");
 const { calculateTargets, ACTIVITY_MULTIPLIERS } = require("./nutritionCalc");
@@ -495,6 +495,18 @@ app.get("/api/progress", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || "Failed to load progress." });
+  }
+});
+
+// Daily motivational quote — generated once per day per profile, cached client-side
+app.get("/api/daily-quote", requireProfile, async (req, res) => {
+  const name = (req.query.name || "").trim().slice(0, 50) || "there";
+  try {
+    const quote = await generateDailyQuote(name);
+    res.json({ quote });
+  } catch (err) {
+    console.error("daily-quote error:", err.message);
+    res.status(500).json({ error: "Could not generate quote." });
   }
 });
 
