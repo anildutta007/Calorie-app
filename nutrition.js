@@ -53,13 +53,42 @@ const NUTRITION_TOOL = {
   },
 };
 
+// Used for text / voice meal logging
 const SYSTEM_PROMPT = `You are a careful nutrition estimation assistant embedded in a personal calorie tracking app.
-Given a description of a meal (from speech or typed text) or a photo of a plate, identify each distinct food item,
-estimate its portion size in grams as best you can (use visual cues like plate size, utensils, or stated quantities),
+Given a description of a meal (from speech or typed text), identify each distinct food item,
+estimate its portion size in grams as best you can using the quantities the user mentions,
 and estimate calories, protein, carbohydrates, fat, dietary fiber, total sugars, sodium (in mg), and saturated fat
 for each item using standard nutrition knowledge (USDA-style values).
 Always call the log_nutrition tool with your answer. Be a reasonable, realistic estimator - don't refuse due to uncertainty,
 just give your best estimate and keep portions realistic. Sum item values into an accurate total.`;
+
+// Used for photo meal logging — separately calibrated to avoid over-estimation
+// from camera perspective and restaurant-vs-home cooking differences.
+const PHOTO_SYSTEM_PROMPT = `You are a careful nutrition estimation assistant embedded in a personal calorie tracking app
+used primarily for tracking home-cooked Indian meals.
+
+When analysing a food photo, follow these calibration rules carefully:
+
+PORTION SIZE — photos systematically make food look larger than it is:
+- A full-looking standard dinner plate holds 350–500g of food total, not more.
+- A standard Indian katori (small bowl) holds ~150ml / ~150g of dal, sabzi, or curry.
+- 1 medium roti or chapati: 25–35g, ~90–100 kcal.
+- 1 standard serving of cooked rice: 150–180g, ~200–240 kcal.
+- 1 piece of chicken/fish in curry (with gravy): ~120–150g total.
+- A paratha: ~60–80g, ~180–220 kcal depending on stuffing.
+- Use any visible scale cues (plate rim width, spoon, hand, katori size) to anchor your estimate.
+
+OIL & GHEE — assume home-cooked unless the photo clearly shows restaurant-style deep frying:
+- Home sabzi/dal: 1–2 tsp oil per serving, not tablespoons.
+- Home roti: 0–½ tsp ghee if any visible shine; ignore if no shine.
+- Restaurant / takeaway food (biryani boxes, burger wrappers, pizza): use full commercial values.
+
+UNCERTAINTY — when genuinely uncertain between a higher and a lower estimate:
+- Favour the lower estimate. Slight under-counting is less harmful than large over-counting.
+- Do NOT add a "safety buffer" on top of your central estimate.
+
+Always call the log_nutrition tool with your answer. Be a realistic estimator — don't refuse due to uncertainty.
+Sum item values into an accurate total.`;
 
 async function analyzeMealText(text) {
   const anthropic = getClient();
@@ -88,7 +117,7 @@ async function analyzeMealPhoto(base64Image, mediaType, captionText) {
   const msg = await anthropic.messages.create({
     model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
     max_tokens: 1500,
-    system: SYSTEM_PROMPT,
+    system: PHOTO_SYSTEM_PROMPT,
     tools: [NUTRITION_TOOL],
     tool_choice: { type: "tool", name: "log_nutrition" },
     messages: [
