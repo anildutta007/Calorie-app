@@ -179,7 +179,7 @@ function buildMealPlanEmail(mealPlan, selectedRecipeNames, recipes) {
 }
 
 // ── Meal-completion suggestion email ─────────────────────────────────────────
-function buildSuggestionEmail(suggestions, remaining) {
+function buildSuggestionEmail(single_dish, suggestions, remaining) {
   const GREEN       = "#2f6f4f";
   const GREEN_DARK  = "#1a4a2e";
   const GREEN_LIGHT = "#e6f2ec";
@@ -197,14 +197,14 @@ function buildSuggestionEmail(suggestions, remaining) {
 
   const tdChip = `display:inline-block;background:${GREEN_LIGHT};color:${GREEN_DARK};border-radius:4px;padding:3px 8px;font-size:12px;margin:2px 4px 2px 0;font-family:Arial,sans-serif;`;
 
-  const suggHtml = suggestions.map((s, i) => {
+  // Helper to render one dish card (used for both single_dish and suggestions)
+  function dishBlock(s, tagLabel, highlight) {
     const recipe = s.recipe || {};
     const meta = [
       recipe.serves        ? `Serves ${recipe.serves}`            : "",
       recipe.prep_time_min ? `Prep ${recipe.prep_time_min} min`   : "",
       recipe.cook_time_min ? `Cook ${recipe.cook_time_min} min`   : "",
     ].filter(Boolean).join(" · ");
-
     const ingHtml = recipe.ingredients?.length
       ? `<p style="margin:10px 0 4px;font-weight:700;font-size:13px;font-family:Arial,sans-serif">Ingredients</p>
          <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.6;font-family:Arial,sans-serif">
@@ -217,11 +217,12 @@ function buildSuggestionEmail(suggestions, remaining) {
            ${recipe.steps.map((x) => `<li style="margin-bottom:4px">${x}</li>`).join("")}
          </ol>`
       : "";
-
+    const bg     = highlight ? "#f0faf4" : "#f9fdf9";
+    const border = highlight ? GREEN     : BORDER;
     return `
-      <div style="margin-bottom:24px;padding:16px;background:#f9fdf9;border:1px solid ${BORDER};border-radius:8px">
+      <div style="margin-bottom:20px;padding:16px;background:${bg};border:2px solid ${border};border-radius:8px">
         <div style="font-size:11px;font-weight:700;color:${GREEN};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;font-family:Arial,sans-serif">
-          Option ${i + 1}
+          ${tagLabel}
         </div>
         <h3 style="margin:0 0 4px;font-size:16px;color:${GREEN_DARK};font-family:Arial,sans-serif">${s.name}</h3>
         <p style="margin:0 0 8px;font-size:13px;color:#555;font-style:italic;font-family:Arial,sans-serif">${s.description}</p>
@@ -236,7 +237,28 @@ function buildSuggestionEmail(suggestions, remaining) {
         ${ingHtml}
         ${stepsHtml}
       </div>`;
-  }).join("");
+  }
+
+  // Single-dish section
+  const singleHtml = single_dish
+    ? `<h2 style="margin:0 0 10px;font-size:14px;color:${GREEN_DARK};font-family:Arial,sans-serif">
+         ⭐ All-in-one option
+       </h2>
+       ${dishBlock(single_dish, "⭐ Covers everything", true)}`
+    : "";
+
+  // Divider
+  const dividerHtml = (single_dish && suggestions.length)
+    ? `<div style="text-align:center;font-size:12px;color:#999;margin:16px 0;font-family:Arial,sans-serif">— or spread it across —</div>`
+    : "";
+
+  // Multi-dish section
+  const multiHtml = suggestions.length
+    ? `<h2 style="margin:0 0 10px;font-size:14px;color:${GREEN_DARK};font-family:Arial,sans-serif">
+         🍽️ Multiple dishes
+       </h2>
+       ${suggestions.map((s, i) => dishBlock(s, `Option ${i + 1}`, false)).join("")}`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -259,7 +281,9 @@ function buildSuggestionEmail(suggestions, remaining) {
     </div>
 
     <div style="padding:20px 24px">
-      ${suggHtml}
+      ${singleHtml}
+      ${dividerHtml}
+      ${multiHtml}
     </div>
 
     <div style="background:#f0f4f1;padding:14px 24px;text-align:center;font-size:11px;color:#888;font-family:Arial,sans-serif">

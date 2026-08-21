@@ -825,12 +825,35 @@ input[type="time"]#edit-meal-time:focus {
   gap: 16px;
 }
 
+/* Section labels and divider */
+.suggest-section-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 16px 0 8px;
+}
+
+.suggest-divider {
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 18px 0 4px;
+}
+
 /* Individual suggestion card */
 .suggest-card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
+}
+
+/* Single all-in-one card — highlighted border */
+.suggest-card--single {
+  border: 2px solid var(--accent);
+  background: var(--card);
 }
 
 .suggest-card-tag {
@@ -841,6 +864,16 @@ input[type="time"]#edit-meal-time:focus {
   letter-spacing: 0.06em;
   margin-bottom: 4px;
 }
+
+/* Gold/star badge for the single-dish option */
+.suggest-card-tag--single {
+  color: #b8860b; /* dark gold — readable on both light and dark themes */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .suggest-card-tag--single { color: #f0c040; }
+}
+:root[data-theme="dark"] .suggest-card-tag--single { color: #f0c040; }
 
 .suggest-card-name {
   margin: 0 0 6px;

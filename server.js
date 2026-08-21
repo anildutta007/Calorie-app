@@ -622,7 +622,7 @@ app.post("/api/meals/suggest-completion", async (req, res) => {
       remaining_calories, remaining_protein_g, remaining_carbs_g, remaining_fat_g,
       diet, liked_foods, avoided_foods,
     } = req.body;
-    const suggestions = await suggestCompletionMeals({
+    const result = await suggestCompletionMeals({
       remaining_calories:  Math.max(0, Number(remaining_calories)  || 0),
       remaining_protein_g: Math.max(0, Number(remaining_protein_g) || 0),
       remaining_carbs_g:   Math.max(0, Number(remaining_carbs_g)   || 0),
@@ -631,7 +631,8 @@ app.post("/api/meals/suggest-completion", async (req, res) => {
       liked_foods:  liked_foods  || null,
       avoided_foods: avoided_foods || null,
     });
-    res.json({ suggestions });
+    // result = { single_dish, suggestions }
+    res.json(result);
   } catch (err) {
     console.error("suggest-completion error:", err);
     res.status(err.status || 500).json({ error: err.message || "Failed to generate suggestions." });
@@ -642,17 +643,17 @@ app.post("/api/meals/suggest-completion", async (req, res) => {
 // Body: { email: string, suggestions: Suggestion[], remaining: {calories, protein_g, carbs_g, fat_g} }
 app.post("/api/meals/suggest-completion/email", async (req, res) => {
   try {
-    const { email, suggestions, remaining } = req.body;
+    const { email, single_dish, suggestions, remaining } = req.body;
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: "Please enter a valid email address." });
     }
-    if (!Array.isArray(suggestions) || !suggestions.length) {
+    if (!single_dish && (!Array.isArray(suggestions) || !suggestions.length)) {
       return res.status(400).json({ error: "No suggestions to send." });
     }
     if (!process.env.RESEND_API_KEY) {
       return res.status(503).json({ error: "Email service is not configured on the server." });
     }
-    const html = buildSuggestionEmail(suggestions, remaining || null);
+    const html = buildSuggestionEmail(single_dish || null, suggestions || [], remaining || null);
     const resend = new Resend(process.env.RESEND_API_KEY);
     const { error: sendError } = await resend.emails.send({
       from:    "Dutta Food Planner <noreply@duttagroup.uk>",

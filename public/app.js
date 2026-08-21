@@ -1722,8 +1722,9 @@ suggestMealsBtn.addEventListener("click", async () => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to generate suggestions.");
-    currentSuggestions = data.suggestions;
-    renderSuggestionsInPanel(data.suggestions, remaining);
+    // data now contains { single_dish, suggestions }
+    currentSuggestions = data; // keep the whole object for PDF / email
+    renderSuggestionsInPanel(data, remaining);
   } catch (err) {
     suggestPanelBody.innerHTML += `<div class="flag over" style="margin:20px">⚠️ ${escapeHtml(err.message)}</div>`;
     suggestPanelFooter.style.display = "none";
@@ -1743,17 +1744,29 @@ function remainingChipsHtml(r) {
 }
 
 // ── Render results in panel ───────────────────────────────────────────────────
-function renderSuggestionsInPanel(suggestions, remaining) {
+function renderSuggestionsInPanel({ single_dish, suggestions }, remaining) {
   suggestPanelBody.innerHTML = `
     <div class="suggest-remaining-summary">
       <div class="suggest-remaining-title">Remaining targets today</div>
       <div class="suggest-remaining-chips">${remainingChipsHtml(remaining)}</div>
     </div>
+
+    <!-- All-in-one single dish -->
+    <div class="suggest-section-label">⭐ All-in-one option</div>
+    <div class="suggest-list">
+      ${renderSuggestionCard(single_dish, -1)}
+    </div>
+
+    <!-- Divider -->
+    <div class="suggest-divider">— or spread it across —</div>
+
+    <!-- Multi-dish options -->
+    <div class="suggest-section-label">🍽️ Multiple dishes</div>
     <div class="suggest-list">
       ${suggestions.map(renderSuggestionCard).join("")}
     </div>`;
 
-  // Wire recipe expand/collapse
+  // Wire recipe expand/collapse for every card
   suggestPanelBody.querySelectorAll(".suggest-recipe-toggle").forEach((btn) => {
     btn.addEventListener("click", () => {
       const card  = btn.closest(".suggest-card");
@@ -1767,7 +1780,9 @@ function renderSuggestionsInPanel(suggestions, remaining) {
   suggestPanelFooter.style.display = "block";
 }
 
+// i === -1  ➜ single-dish (all-in-one) card; i >= 0 ➜ multi-dish option
 function renderSuggestionCard(s, i) {
+  const isSingle = i === -1;
   const recipe = s.recipe || {};
   const meta = [
     recipe.serves        ? `Serves ${recipe.serves}`          : "",
@@ -1785,10 +1800,13 @@ function renderSuggestionCard(s, i) {
     : "";
 
   const hasRecipe = ingHtml || stepsHtml;
+  const tagHtml = isSingle
+    ? `<div class="suggest-card-tag suggest-card-tag--single">⭐ Covers everything</div>`
+    : `<div class="suggest-card-tag">Option ${i + 1}</div>`;
 
   return `
-    <div class="suggest-card">
-      <div class="suggest-card-tag">Option ${i + 1}</div>
+    <div class="suggest-card${isSingle ? " suggest-card--single" : ""}">
+      ${tagHtml}
       <h3 class="suggest-card-name">${escapeHtml(s.name)}</h3>
       <p class="suggest-card-desc">${escapeHtml(s.description)}</p>
       <div class="suggest-card-portion muted">${escapeHtml(s.portion_desc)}</div>
@@ -1810,12 +1828,46 @@ function renderSuggestionCard(s, i) {
 
 // ── PDF download ──────────────────────────────────────────────────────────────
 document.getElementById("suggest-download-btn").addEventListener("click", () => {
-  if (!currentSuggestions?.length) return;
+  if (!currentSuggestions) return;
   buildSuggestionPrintView(currentSuggestions, suggestionRemaining);
   window.print();
 });
 
-function buildSuggestionPrintView(suggestions, remaining) {
+function printDishCard(s, tagLabel) {
+  const recipe = s.recipe || {};
+  const meta = [
+    recipe.serves        ? `Serves ${recipe.serves}`          : "",
+    recipe.prep_time_min ? `Prep ${recipe.prep_time_min} min` : "",
+    recipe.cook_time_min ? `Cook ${recipe.cook_time_min} min` : "",
+  ].filter(Boolean).join(" · ");
+  const ingHtml = recipe.ingredients?.length
+    ? `<div class="print-recipe-block"><strong>Ingredients</strong>
+         <ul>${recipe.ingredients.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>`
+    : "";
+  const stepsHtml = recipe.steps?.length
+    ? `<div class="print-recipe-block"><strong>Method</strong>
+         <ol>${recipe.steps.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ol></div>`
+    : "";
+  return `
+    <div class="print-recipe-card">
+      <div class="print-recipe-header">
+        <div>
+          <div class="print-suggest-tag">${tagLabel}</div>
+          <div class="print-recipe-name">${escapeHtml(s.name)}</div>
+          ${meta ? `<div class="print-recipe-meta">${meta}</div>` : ""}
+          <div class="print-recipe-meta">
+            ${escapeHtml(s.portion_desc)} ·
+            ${Math.round(s.calories)} kcal ·
+            P ${round1(s.protein_g)}g · C ${round1(s.carbs_g)}g · F ${round1(s.fat_g)}g
+          </div>
+        </div>
+      </div>
+      <p style="font-style:italic;color:#555;font-size:12px;margin:6px 0 8px">${escapeHtml(s.description)}</p>
+      <div class="print-recipe-body">${ingHtml}${stepsHtml}</div>
+    </div>`;
+}
+
+function buildSuggestionPrintView({ single_dish, suggestions }, remaining) {
   const remHtml = remaining
     ? `<div class="print-suggest-remaining">
         Remaining targets: ${Math.round(remaining.calories || 0)} kcal ·
@@ -1825,42 +1877,15 @@ function buildSuggestionPrintView(suggestions, remaining) {
        </div>`
     : "";
 
-  const cardsHtml = suggestions.map((s, i) => {
-    const recipe = s.recipe || {};
-    const meta = [
-      recipe.serves        ? `Serves ${recipe.serves}`          : "",
-      recipe.prep_time_min ? `Prep ${recipe.prep_time_min} min` : "",
-      recipe.cook_time_min ? `Cook ${recipe.cook_time_min} min` : "",
-    ].filter(Boolean).join(" · ");
-    const ingHtml = recipe.ingredients?.length
-      ? `<div class="print-recipe-block"><strong>Ingredients</strong>
-           <ul>${recipe.ingredients.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>`
-      : "";
-    const stepsHtml = recipe.steps?.length
-      ? `<div class="print-recipe-block"><strong>Method</strong>
-           <ol>${recipe.steps.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ol></div>`
-      : "";
-    return `
-      <div class="print-recipe-card">
-        <div class="print-recipe-header">
-          <div>
-            <div class="print-suggest-tag">Option ${i + 1}</div>
-            <div class="print-recipe-name">${escapeHtml(s.name)}</div>
-            ${meta ? `<div class="print-recipe-meta">${meta}</div>` : ""}
-            <div class="print-recipe-meta">
-              ${escapeHtml(s.portion_desc)} ·
-              ${Math.round(s.calories)} kcal ·
-              P ${round1(s.protein_g)}g · C ${round1(s.carbs_g)}g · F ${round1(s.fat_g)}g
-            </div>
-          </div>
-        </div>
-        <p style="font-style:italic;color:#555;font-size:12px;margin:6px 0 8px">${escapeHtml(s.description)}</p>
-        <div class="print-recipe-body">
-          ${ingHtml}
-          ${stepsHtml}
-        </div>
-      </div>`;
-  }).join("");
+  const singleHtml = single_dish
+    ? `<h3 class="print-recipes-heading" style="font-size:14px">⭐ All-in-one option</h3>
+       ${printDishCard(single_dish, "⭐ Covers everything")}`
+    : "";
+
+  const multiHtml = suggestions?.length
+    ? `<h3 class="print-recipes-heading" style="font-size:14px;margin-top:20px">🍽️ Multiple dishes</h3>
+       ${suggestions.map((s, i) => printDishCard(s, `Option ${i + 1}`)).join("")}`
+    : "";
 
   document.getElementById("print-view").innerHTML = `
     <div class="print-calendar-section">
@@ -1871,7 +1896,8 @@ function buildSuggestionPrintView(suggestions, remaining) {
       ${remHtml}
     </div>
     <div class="print-recipes-section">
-      ${cardsHtml}
+      ${singleHtml}
+      ${multiHtml}
     </div>`;
 }
 
@@ -1893,8 +1919,9 @@ document.getElementById("suggest-email-btn").addEventListener("click", async fun
       headers: profileHeaders({ "Content-Type": "application/json" }),
       body:    JSON.stringify({
         email,
-        suggestions: currentSuggestions,
-        remaining:   suggestionRemaining,
+        single_dish:  currentSuggestions?.single_dish  || null,
+        suggestions:  currentSuggestions?.suggestions  || [],
+        remaining:    suggestionRemaining,
       }),
     });
     const data = await res.json();
