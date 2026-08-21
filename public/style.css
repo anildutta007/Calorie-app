@@ -1268,40 +1268,75 @@ input[type="time"]#edit-meal-time:focus {
   vertical-align: top;
 }
 
+/* Target label above the rectangle */
+.hw-tgt-above {
+  font-size: 0.62rem;
+  color: var(--muted);
+  text-align: center;
+  margin-bottom: 3px;
+  min-height: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* The rectangle: fixed height, fills from the bottom */
 .hw-bar {
-  height: 60px;
-  border-radius: 6px;
+  height: 48px;
+  border-radius: 8px;
   background: var(--bg);
   border: 1px solid var(--border);
   overflow: hidden;
+  position: relative;            /* needed for absolute text overlay */
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;   /* fill grows upward from the bottom */
+  justify-content: flex-end;    /* fill grows upward from the bottom */
 }
 
 .hw-fill {
   width: 100%;
-  border-radius: 3px 3px 0 0;
   transition: height 0.35s ease;
 }
 
-/* Traffic-light colours */
-.hw-fill.hw-green { background: var(--accent); }        /* ≥ 80% */
-.hw-fill.hw-amber { background: var(--warn); }           /* 60–80% */
-.hw-fill.hw-red   { background: var(--over); }           /* < 60% */
+/* Traffic-light colours — use background-color (NOT the background shorthand)
+   so the background-image from .hw-hatch isn't clobbered by specificity. */
+.hw-fill.hw-green { background-color: var(--accent); }  /* ≥ 80% */
+.hw-fill.hw-amber { background-color: var(--warn); }    /* 60–80% */
+.hw-fill.hw-red   { background-color: var(--over); }    /* < 60% */
 
-/* Numbers below each bar */
-.hw-nums {
-  margin-top: 4px;
-  line-height: 1.3;
-  font-size: 0.7rem;
+/* Criss-cross overlay for values that exceed the target */
+.hw-hatch {
+  background-image:
+    repeating-linear-gradient( 45deg, rgba(255,255,255,0.28) 0, rgba(255,255,255,0.28) 2px, transparent 0, transparent 7px),
+    repeating-linear-gradient(-45deg, rgba(255,255,255,0.28) 0, rgba(255,255,255,0.28) 2px, transparent 0, transparent 7px);
+  background-size: 10px 10px;
 }
-.hw-val  { display: block; font-weight: 700; color: var(--ink); }
-.hw-tgt  { display: block; color: var(--muted); font-size: 0.65rem; }
 
-/* Achieved > target: highlight the achieved number */
-.hw-over { color: var(--over); }
+/* Achieved value + percentage centred inside the bar via absolute positioning */
+.hw-btext {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  pointer-events: none;
+  line-height: 1;
+}
+.hw-bval { font-size: 0.78rem; font-weight: 700; display: block; }
+.hw-bpct { font-size: 0.62rem; font-weight: 600; display: block; }
+
+/* White text when fill covers the centre (≥ 50% fill) */
+.hw-btext-light .hw-bval,
+.hw-btext-light .hw-bpct { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.35); }
+
+/* Dark text when fill is small — text sits on the empty background */
+.hw-btext-dark .hw-bval { color: var(--ink); }
+.hw-btext-dark .hw-bpct { color: var(--muted); }
+
+/* Muted text when there is no value at all */
+.hw-btext-empty .hw-bval { color: var(--muted); }
 
 /* --- Target calculator --- */
 

@@ -1126,8 +1126,6 @@ async function loadHistory() {
   }
   const date = historyDateInput.value;
   const today = new Date().toISOString().slice(0, 10);
-  // Always refresh the 7-day overview at the top of the History tab
-  load7DayTable();
   try {
     const res = await fetch(`/api/meals?date=${date}`, { headers: profileHeaders() });
     if (res.status >= 500) throw new Error(`Server error ${res.status}`);
@@ -1141,20 +1139,12 @@ async function loadHistory() {
   }
 }
 
-// ── 7-day macro overview table (top of History tab) ───────────────────────────
-
-async function load7DayTable() {
-  const container = document.getElementById("history-week");
-  if (!container) return;
-  try {
-    const res = await fetch("/api/progress?days=7", { headers: profileHeaders() });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Failed.");
-    render7DayTable(container, data.days || []);
-  } catch (_) {
-    container.innerHTML = `<p class="muted" style="font-size:0.85rem;margin:0">Could not load 7-day summary.</p>`;
-  }
-}
+// ── 7-day macro overview table (Progress tab) ────────────────────────────────
+// Called directly from renderProgress() with the data it already fetched.
+// Layout: rows = days, columns = Cal / Protein / Carbs / Fat.
+// Each cell: target label above the rectangle, achieved value + % inside,
+// fill colour green ≥80%, amber 60–80%, red <60%.
+// If the achieved value exceeds the target the rectangle shows criss-cross lines.
 
 function render7DayTable(container, dayRows) {
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -1177,32 +1167,42 @@ function render7DayTable(container, dayRows) {
     { key: "fat_g",     head: "Fat",     unit: "g",    target: currentTargets?.fat_g,     fmt: round1 },
   ];
 
-  function pctClass(pct) {
-    if (pct >= 80) return "hw-green";
-    if (pct >= 60) return "hw-amber";
+  function fillColor(rawPct) {
+    if (rawPct >= 80) return "hw-green";
+    if (rawPct >= 60) return "hw-amber";
     return "hw-red";
   }
 
   function macroCell(rawValue, macro) {
-    const val = Number(rawValue) || 0;
-    const tgt = macro.target || 0;
+    const val    = Number(rawValue) || 0;
+    const tgt    = macro.target || 0;
     const hasVal = val > 0;
     const hasTgt = tgt > 0;
 
-    const pct     = hasTgt && hasVal ? Math.min(Math.round((val / tgt) * 100), 100) : 0;
-    const color   = hasTgt && hasVal ? pctClass(pct) : "";
+    const rawPct  = hasTgt && hasVal ? Math.round((val / tgt) * 100) : 0;
+    const fillPct = Math.min(rawPct, 100);   // visual fill capped at 100%
     const isOver  = hasTgt && val > tgt;
+    const color   = hasTgt && hasVal ? fillColor(rawPct) : "";
 
-    const dispVal = hasVal ? macro.fmt(val) : "—";
-    const dispTgt = hasTgt ? `/${macro.fmt(tgt)}` : "";
+    // Target shown above the rectangle (spacer keeps rows aligned when no target)
+    const tgtLabel = `<div class="hw-tgt-above">${hasTgt ? `${macro.fmt(tgt)} ${macro.unit}` : ""}</div>`;
+
+    // Text inside: white when the fill covers the centre (fillPct ≥ 50), ink otherwise
+    const textCls = !hasVal       ? "hw-btext hw-btext-empty"
+                  : fillPct >= 50 ? "hw-btext hw-btext-light"
+                  :                 "hw-btext hw-btext-dark";
+
+    const dispVal = hasVal ? String(macro.fmt(val)) : "—";
+    const dispPct = hasTgt && hasVal ? `${rawPct}%` : "";
 
     return `<td class="hw-mac">
+      ${tgtLabel}
       <div class="hw-bar">
-        ${color ? `<div class="hw-fill ${color}" style="height:${pct}%"></div>` : ""}
-      </div>
-      <div class="hw-nums">
-        <span class="hw-val${isOver ? " hw-over" : ""}">${dispVal}</span>
-        <span class="hw-tgt">${dispTgt}</span>
+        ${color ? `<div class="hw-fill ${color}${isOver ? " hw-hatch" : ""}" style="height:${fillPct}%"></div>` : ""}
+        <div class="${textCls}">
+          <span class="hw-bval">${dispVal}</span>
+          ${dispPct ? `<span class="hw-bpct">${dispPct}</span>` : ""}
+        </div>
       </div>
     </td>`;
   }
@@ -1212,8 +1212,8 @@ function render7DayTable(container, dayRows) {
   ).join("");
 
   const bodyRows = dates.map((date) => {
-    const row  = byDate[date] || {};
-    const d    = parseDateLocal(date);
+    const row     = byDate[date] || {};
+    const d       = parseDateLocal(date);
     const isToday = date === todayStr;
     const dName   = d.toLocaleDateString([], { weekday: "short" });
     const dNum    = d.getDate();
@@ -1227,7 +1227,7 @@ function render7DayTable(container, dayRows) {
   }).join("");
 
   container.innerHTML = `
-    <h2 style="margin:0 0 12px">Last 7 Days</h2>
+    <h2 style="margin:0 0 14px">Last 7 Days</h2>
     <div class="hw-scroll">
       <table class="hw-table">
         <thead><tr><th class="hw-dh"></th>${headRow}</tr></thead>
@@ -2629,6 +2629,7 @@ function renderProgress(dayRows) {
       <h2>📈 Last 7 Days</h2>
       <div class="muted">${loggedCount} of 7 days logged${loggedCount === 0 ? " — start logging meals to see your progress!" : ""}</div>
     </div>
+    <div id="week-overview" class="card"></div>
     <div id="ai-summary-card" class="card ai-summary-card">
       <div class="ai-summary-loading">
         <div class="ai-shimmer ai-shimmer-score"></div>
@@ -2639,6 +2640,9 @@ function renderProgress(dayRows) {
     ${metrics.map(chartHtml).join("")}
     ${nutrientsHtml}
   `;
+
+  // Populate the 7-day macro overview table immediately (data already in hand)
+  render7DayTable(document.getElementById("week-overview"), dayRows);
 
   // Kick off AI summary async — fills in #ai-summary-card when ready.
   // week is ordered oldest→newest (index 0 = 6 days ago, index 6 = today).
