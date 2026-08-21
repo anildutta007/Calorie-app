@@ -1139,12 +1139,10 @@ async function loadHistory() {
   }
 }
 
-// ── 7-day progress: ring gauge grid + trend line charts (Progress tab) ───────
+// ── 7-day progress: 2×2 bar charts (Progress tab) ────────────────────────────
 // Called directly from renderProgress() with the data it already fetched.
-// Top section: a scrollable row of day cards, each showing 4 mini circular
-//   gauges (one per macro) filled to the % of target achieved.
-// Bottom section: 2×2 grid of small SVG trend-line charts with a dashed
-//   target line, one chart per macro.
+// Layout: 2×2 grid — one SVG bar chart per macro (Calories, Protein, Carbs, Fat).
+// Each chart: 7 day bars, dashed target line, y-axis labels, today highlighted.
 
 function render7DayTable(container, dayRows) {
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -1167,47 +1165,12 @@ function render7DayTable(container, dayRows) {
     { key: "fat_g",     label: "Fat",      color: "#EC4899", target: currentTargets?.fat_g,     fmt: round1 },
   ];
 
-  // ── Mini ring SVG ──────────────────────────────────────────────────────────
-  function miniRing(val, tgt, color) {
-    const R = 10, SW = 3.5, S = 28, c = 14;
-    const circ = 2 * Math.PI * R;
-    const pct  = tgt > 0 && val > 0 ? Math.min(val / tgt, 1) : 0;
-    const dash = (pct * circ).toFixed(2);
-    return `<svg viewBox="0 0 ${S} ${S}" width="${S}" height="${S}">
-      <circle cx="${c}" cy="${c}" r="${R}" fill="none" stroke="var(--border)" stroke-width="${SW}"/>
-      ${pct > 0 ? `<circle cx="${c}" cy="${c}" r="${R}" fill="none" stroke="${color}"
-        stroke-width="${SW}" stroke-linecap="round"
-        stroke-dasharray="${dash} ${circ.toFixed(2)}"
-        transform="rotate(-90 ${c} ${c})"/>` : ""}
-    </svg>`;
-  }
-
-  // ── Ring-gauge day cards ───────────────────────────────────────────────────
-  const ringCards = dates.map((date) => {
-    const row     = byDate[date] || {};
-    const d       = parseDateLocal(date);
-    const isToday = date === todayStr;
-    const hasData = Boolean(byDate[date]);
-    const dName   = d.toLocaleDateString([], { weekday: "short" });
-    const dNum    = d.getDate();
-    const rings   = macros.map((m) =>
-      `<div class="pg-ring">${miniRing(hasData ? Number(row[m.key]) || 0 : 0, m.target, m.color)}</div>`
-    ).join("");
-    return `<div class="pg-day-card${isToday ? " pg-today-card" : ""}">
-      <div class="pg-day-hd${isToday ? " pg-today-hd" : ""}">
-        <span class="pg-dname">${dName}</span>
-        <span class="pg-dnum">${dNum}</span>
-      </div>
-      <div class="pg-rings">${rings}</div>
-    </div>`;
-  }).join("");
-
-  // ── Trend line chart for one macro ────────────────────────────────────────
-  function trendChart(macro) {
+  // ── SVG bar chart for one macro ───────────────────────────────────────────
+  function barChart(macro) {
     const W = 260, H = 108, PL = 34, PR = 6, PT = 8, PB = 20;
     const iW = W - PL - PR, iH = H - PT - PB;
 
-    // null = no data logged that day; 0-value logged days get null too
+    // null = day not logged; treat 0 as null too
     const vals = dates.map((date) => {
       const row = byDate[date];
       if (!row) return null;
@@ -1219,10 +1182,12 @@ function render7DayTable(container, dayRows) {
     const tgt     = macro.target || 0;
     const ceiling = Math.max(tgt * 1.15, ...(defined.length ? [Math.max(...defined) * 1.1] : [1]), 1);
 
-    const xp = (i) => PL + (i / 6) * iW;
-    const yp = (v) => PT + iH * (1 - v / ceiling);
+    const slotW   = iW / 7;
+    const barW    = slotW * 0.65;
+    const xCenter = (i) => PL + slotW * i + slotW / 2;
+    const yp      = (v) => PT + iH * (1 - v / ceiling);
 
-    // Y-axis grid lines (4 ticks, skip zero)
+    // Y-axis grid lines + labels (4 ticks)
     const TICKS = 4;
     const step  = ceiling / TICKS;
     const fmtY  = (v) =>
@@ -1243,31 +1208,22 @@ function render7DayTable(container, dayRows) {
            stroke="${macro.color}" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/>`
       : "";
 
-    // Trend line — break across days with no data
-    let pathD = "";
-    vals.forEach((v, i) => {
-      if (v === null) return;
-      const x = xp(i).toFixed(1), y = yp(v).toFixed(1);
-      const prevNull = i === 0 || vals[i - 1] === null;
-      pathD += prevNull ? `M ${x} ${y} ` : `L ${x} ${y} `;
-    });
-    const line = pathD
-      ? `<path d="${pathD.trim()}" fill="none" stroke="${macro.color}"
-           stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`
-      : "";
+    // Bars — today gets full opacity, other days slightly muted
+    const bars = vals.map((v, i) => {
+      if (v === null) return "";
+      const isToday = dates[i] === todayStr;
+      const barH    = Math.max(iH * (v / ceiling), 2).toFixed(1);
+      const x       = (xCenter(i) - barW / 2).toFixed(1);
+      const y       = (PT + iH - parseFloat(barH)).toFixed(1);
+      return `<rect x="${x}" y="${y}" width="${barW.toFixed(1)}" height="${barH}"
+        rx="3" fill="${macro.color}" opacity="${isToday ? "1" : "0.7"}"/>`;
+    }).join("");
 
-    // Dots on each logged day
-    const dots = vals.map((v, i) =>
-      v !== null
-        ? `<circle cx="${xp(i).toFixed(1)}" cy="${yp(v).toFixed(1)}" r="2.8" fill="${macro.color}"/>`
-        : ""
-    ).join("");
-
-    // X-axis day labels — today accented
+    // X-axis labels — today in macro colour
     const xLabels = dates.map((date, i) => {
       const dName   = parseDateLocal(date).toLocaleDateString([], { weekday: "short" });
       const isToday = date === todayStr;
-      return `<text x="${xp(i).toFixed(1)}" y="${H - 3}" text-anchor="middle"
+      return `<text x="${xCenter(i).toFixed(1)}" y="${H - 3}" text-anchor="middle"
         font-size="7.5" fill="${isToday ? macro.color : "var(--muted)"}"
         font-weight="${isToday ? "700" : "400"}">${dName}</text>`;
     }).join("");
@@ -1275,17 +1231,14 @@ function render7DayTable(container, dayRows) {
     return `<div class="card pg-chart">
       <div class="pg-chart-title" style="color:${macro.color}">${macro.label}</div>
       <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">
-        ${gridLines}${tgtLine}${line}${dots}${xLabels}
+        ${gridLines}${tgtLine}${bars}${xLabels}
       </svg>
     </div>`;
   }
 
   container.innerHTML = `
-    <div class="card">
-      <div class="pg-ring-scroll">${ringCards}</div>
-    </div>
     <div class="pg-charts-grid">
-      ${macros.map(trendChart).join("")}
+      ${macros.map(barChart).join("")}
     </div>`;
 }
 

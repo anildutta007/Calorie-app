@@ -1404,7 +1404,6 @@ input[type="time"]#edit-meal-time:focus {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-  margin-top: 10px;
 }
 .pg-chart { padding: 12px 8px 6px; }
 .pg-chart-title {
