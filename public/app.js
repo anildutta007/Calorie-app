@@ -1139,12 +1139,12 @@ async function loadHistory() {
   }
 }
 
-// ── 7-day macro overview table (Progress tab) ────────────────────────────────
+// ── 7-day progress: ring gauge grid + trend line charts (Progress tab) ───────
 // Called directly from renderProgress() with the data it already fetched.
-// Layout: columns = days (7), rows = macros (Calories / Protein / Carbs / Fat).
-// Each cell: target label above the rectangle, achieved value + % inside,
-// fill colour green ≥80%, amber 60–80%, red <60%.
-// If the achieved value exceeds the target the rectangle shows criss-cross lines.
+// Top section: a scrollable row of day cards, each showing 4 mini circular
+//   gauges (one per macro) filled to the % of target achieved.
+// Bottom section: 2×2 grid of small SVG trend-line charts with a dashed
+//   target line, one chart per macro.
 
 function render7DayTable(container, dayRows) {
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -1161,85 +1161,131 @@ function render7DayTable(container, dayRows) {
   dayRows.forEach((r) => (byDate[r.date] = r));
 
   const macros = [
-    { key: "calories",  head: "Calories", unit: "kcal", target: currentTargets?.calories,  fmt: Math.round },
-    { key: "protein_g", head: "Protein",  unit: "g",    target: currentTargets?.protein_g, fmt: round1 },
-    { key: "carbs_g",   head: "Carbs",    unit: "g",    target: currentTargets?.carbs_g,   fmt: round1 },
-    { key: "fat_g",     head: "Fat",      unit: "g",    target: currentTargets?.fat_g,     fmt: round1 },
+    { key: "calories",  label: "Calories", color: "#3B82F6", target: currentTargets?.calories,  fmt: Math.round },
+    { key: "protein_g", label: "Protein",  color: "#10B981", target: currentTargets?.protein_g, fmt: round1 },
+    { key: "carbs_g",   label: "Carbs",    color: "#F59E0B", target: currentTargets?.carbs_g,   fmt: round1 },
+    { key: "fat_g",     label: "Fat",      color: "#EC4899", target: currentTargets?.fat_g,     fmt: round1 },
   ];
 
-  function fillColor(rawPct) {
-    if (rawPct >= 80) return "hw-green";
-    if (rawPct >= 60) return "hw-amber";
-    return "hw-red";
+  // ── Mini ring SVG ──────────────────────────────────────────────────────────
+  function miniRing(val, tgt, color) {
+    const R = 10, SW = 3.5, S = 28, c = 14;
+    const circ = 2 * Math.PI * R;
+    const pct  = tgt > 0 && val > 0 ? Math.min(val / tgt, 1) : 0;
+    const dash = (pct * circ).toFixed(2);
+    return `<svg viewBox="0 0 ${S} ${S}" width="${S}" height="${S}">
+      <circle cx="${c}" cy="${c}" r="${R}" fill="none" stroke="var(--border)" stroke-width="${SW}"/>
+      ${pct > 0 ? `<circle cx="${c}" cy="${c}" r="${R}" fill="none" stroke="${color}"
+        stroke-width="${SW}" stroke-linecap="round"
+        stroke-dasharray="${dash} ${circ.toFixed(2)}"
+        transform="rotate(-90 ${c} ${c})"/>` : ""}
+    </svg>`;
   }
 
-  // Looks up the value for a specific date+macro combination
-  function macroCell(date, macro) {
-    const row    = byDate[date] || {};
-    const val    = Number(row[macro.key]) || 0;
-    const tgt    = macro.target || 0;
-    const hasVal = Boolean(byDate[date]) && val > 0;
-    const hasTgt = tgt > 0;
-
-    const rawPct  = hasTgt && hasVal ? Math.round((val / tgt) * 100) : 0;
-    const fillPct = Math.min(rawPct, 100);   // visual fill capped at 100%
-    const isOver  = hasTgt && val > tgt;
-    const color   = hasTgt && hasVal ? fillColor(rawPct) : "";
-
-    // Target above bar — unit omitted here, shown in the row label instead
-    const tgtLabel = `<div class="hw-tgt-above">${hasTgt ? macro.fmt(tgt) : ""}</div>`;
-
-    // Text inside: white when fill covers the centre (fillPct ≥ 50), ink otherwise
-    const textCls = !hasVal       ? "hw-btext hw-btext-empty"
-                  : fillPct >= 50 ? "hw-btext hw-btext-light"
-                  :                 "hw-btext hw-btext-dark";
-
-    const dispVal = hasVal ? String(macro.fmt(val)) : "—";
-    const dispPct = hasTgt && hasVal ? `${rawPct}%` : "";
-
-    return `<td class="hw-mac">
-      ${tgtLabel}
-      <div class="hw-bar">
-        ${color ? `<div class="hw-fill ${color}${isOver ? " hw-hatch" : ""}" style="height:${fillPct}%"></div>` : ""}
-        <div class="${textCls}">
-          <span class="hw-bval">${dispVal}</span>
-          ${dispPct ? `<span class="hw-bpct">${dispPct}</span>` : ""}
-        </div>
-      </div>
-    </td>`;
-  }
-
-  // Header: empty label col + one column per day
-  const headCols = dates.map((date) => {
+  // ── Ring-gauge day cards ───────────────────────────────────────────────────
+  const ringCards = dates.map((date) => {
+    const row     = byDate[date] || {};
     const d       = parseDateLocal(date);
     const isToday = date === todayStr;
+    const hasData = Boolean(byDate[date]);
     const dName   = d.toLocaleDateString([], { weekday: "short" });
     const dNum    = d.getDate();
-    return `<th class="hw-mh${isToday ? " hw-today-col" : ""}">
-      <div class="hw-dname${isToday ? " hw-today-lbl" : ""}">${dName}</div>
-      <div class="hw-dnum">${dNum}</div>
-    </th>`;
+    const rings   = macros.map((m) =>
+      `<div class="pg-ring">${miniRing(hasData ? Number(row[m.key]) || 0 : 0, m.target, m.color)}</div>`
+    ).join("");
+    return `<div class="pg-day-card${isToday ? " pg-today-card" : ""}">
+      <div class="pg-day-hd${isToday ? " pg-today-hd" : ""}">
+        <span class="pg-dname">${dName}</span>
+        <span class="pg-dnum">${dNum}</span>
+      </div>
+      <div class="pg-rings">${rings}</div>
+    </div>`;
   }).join("");
 
-  // Body: one row per macro
-  const bodyRows = macros.map((macro) => {
-    const cells = dates.map((date) => macroCell(date, macro)).join("");
-    return `<tr>
-      <td class="hw-row-label">
-        <div class="hw-row-name">${macro.head}</div>
-        <div class="hw-row-unit">${macro.unit}</div>
-      </td>
-      ${cells}
-    </tr>`;
-  }).join("");
+  // ── Trend line chart for one macro ────────────────────────────────────────
+  function trendChart(macro) {
+    const W = 260, H = 108, PL = 34, PR = 6, PT = 8, PB = 20;
+    const iW = W - PL - PR, iH = H - PT - PB;
+
+    // null = no data logged that day; 0-value logged days get null too
+    const vals = dates.map((date) => {
+      const row = byDate[date];
+      if (!row) return null;
+      const v = Number(row[macro.key]) || 0;
+      return v > 0 ? v : null;
+    });
+
+    const defined = vals.filter((v) => v !== null);
+    const tgt     = macro.target || 0;
+    const ceiling = Math.max(tgt * 1.15, ...(defined.length ? [Math.max(...defined) * 1.1] : [1]), 1);
+
+    const xp = (i) => PL + (i / 6) * iW;
+    const yp = (v) => PT + iH * (1 - v / ceiling);
+
+    // Y-axis grid lines (4 ticks, skip zero)
+    const TICKS = 4;
+    const step  = ceiling / TICKS;
+    const fmtY  = (v) =>
+      macro.key === "calories" && v >= 1000 ? `${(v / 1000).toFixed(1)}k` : Math.round(v);
+
+    const gridLines = Array.from({ length: TICKS }, (_, k) => {
+      const v = step * (k + 1);
+      const y = yp(v).toFixed(1);
+      return `<line x1="${PL}" y1="${y}" x2="${W - PR}" y2="${y}"
+                stroke="var(--border)" stroke-width="0.5"/>
+              <text x="${PL - 3}" y="${(+y + 3.5).toFixed(1)}" text-anchor="end"
+                font-size="7.5" fill="var(--muted)">${fmtY(v)}</text>`;
+    }).join("");
+
+    // Dashed target line
+    const tgtLine = tgt > 0 && tgt <= ceiling * 1.05
+      ? `<line x1="${PL}" y1="${yp(tgt).toFixed(1)}" x2="${W - PR}" y2="${yp(tgt).toFixed(1)}"
+           stroke="${macro.color}" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/>`
+      : "";
+
+    // Trend line — break across days with no data
+    let pathD = "";
+    vals.forEach((v, i) => {
+      if (v === null) return;
+      const x = xp(i).toFixed(1), y = yp(v).toFixed(1);
+      const prevNull = i === 0 || vals[i - 1] === null;
+      pathD += prevNull ? `M ${x} ${y} ` : `L ${x} ${y} `;
+    });
+    const line = pathD
+      ? `<path d="${pathD.trim()}" fill="none" stroke="${macro.color}"
+           stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`
+      : "";
+
+    // Dots on each logged day
+    const dots = vals.map((v, i) =>
+      v !== null
+        ? `<circle cx="${xp(i).toFixed(1)}" cy="${yp(v).toFixed(1)}" r="2.8" fill="${macro.color}"/>`
+        : ""
+    ).join("");
+
+    // X-axis day labels — today accented
+    const xLabels = dates.map((date, i) => {
+      const dName   = parseDateLocal(date).toLocaleDateString([], { weekday: "short" });
+      const isToday = date === todayStr;
+      return `<text x="${xp(i).toFixed(1)}" y="${H - 3}" text-anchor="middle"
+        font-size="7.5" fill="${isToday ? macro.color : "var(--muted)"}"
+        font-weight="${isToday ? "700" : "400"}">${dName}</text>`;
+    }).join("");
+
+    return `<div class="card pg-chart">
+      <div class="pg-chart-title" style="color:${macro.color}">${macro.label}</div>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">
+        ${gridLines}${tgtLine}${line}${dots}${xLabels}
+      </svg>
+    </div>`;
+  }
 
   container.innerHTML = `
-    <h2 style="margin:0 0 14px">Last 7 Days</h2>
-    <div class="hw-scroll">
-      <table class="hw-table">
-        <thead><tr><th class="hw-dh"></th>${headCols}</tr></thead>
-        <tbody>${bodyRows}</tbody>
-      </table>
+    <div class="card">
+      <div class="pg-ring-scroll">${ringCards}</div>
+    </div>
+    <div class="pg-charts-grid">
+      ${macros.map(trendChart).join("")}
     </div>`;
 }
 
@@ -2585,7 +2631,7 @@ function renderProgress(dayRows) {
       <h2>📈 Last 7 Days</h2>
       <div class="muted">${loggedCount} of 7 days logged${loggedCount === 0 ? " — start logging meals to see your progress!" : ""}</div>
     </div>
-    <div id="week-overview" class="card"></div>
+    <div id="week-overview"></div>
     <div id="ai-summary-card" class="card ai-summary-card">
       <div class="ai-summary-loading">
         <div class="ai-shimmer ai-shimmer-score"></div>

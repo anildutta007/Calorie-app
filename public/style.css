@@ -1358,6 +1358,64 @@ input[type="time"]#edit-meal-time:focus {
 /* Muted text when there is no value at all */
 .hw-btext-empty .hw-bval { color: var(--muted); }
 
+/* ── Progress tab: ring-gauge day cards ─────────────────────────────────── */
+.pg-ring-scroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.pg-ring-scroll::-webkit-scrollbar { display: none; }
+
+.pg-day-card {
+  flex: 0 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 64px;
+}
+.pg-today-card { border-color: var(--accent); }
+
+.pg-day-hd {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.pg-dname { font-size: 0.72rem; font-weight: 700; color: var(--ink); }
+.pg-dnum  { font-size: 0.65rem; color: var(--muted); }
+.pg-today-hd .pg-dname { color: var(--accent); }
+
+.pg-rings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.pg-ring { display: flex; align-items: center; justify-content: center; }
+
+/* ── Progress tab: 2×2 trend-line charts ────────────────────────────────── */
+.pg-charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+.pg-chart { padding: 12px 8px 6px; }
+.pg-chart-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+@media (max-width: 460px) {
+  .pg-charts-grid { grid-template-columns: 1fr; }
+}
+
 /* --- Target calculator --- */
 
 .target-calc-box {
