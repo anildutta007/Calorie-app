@@ -1126,6 +1126,8 @@ async function loadHistory() {
   }
   const date = historyDateInput.value;
   const today = new Date().toISOString().slice(0, 10);
+  // Always refresh the 7-day overview at the top of the History tab
+  load7DayTable();
   try {
     const res = await fetch(`/api/meals?date=${date}`, { headers: profileHeaders() });
     if (res.status >= 500) throw new Error(`Server error ${res.status}`);
@@ -1137,6 +1139,101 @@ async function loadHistory() {
   } catch (err) {
     showDbBanner(loadHistory);
   }
+}
+
+// ── 7-day macro overview table (top of History tab) ───────────────────────────
+
+async function load7DayTable() {
+  const container = document.getElementById("history-week");
+  if (!container) return;
+  try {
+    const res = await fetch("/api/progress?days=7", { headers: profileHeaders() });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed.");
+    render7DayTable(container, data.days || []);
+  } catch (_) {
+    container.innerHTML = `<p class="muted" style="font-size:0.85rem;margin:0">Could not load 7-day summary.</p>`;
+  }
+}
+
+function render7DayTable(container, dayRows) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Build 7-day window oldest → newest
+  const dates = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+
+  const byDate = {};
+  dayRows.forEach((r) => (byDate[r.date] = r));
+
+  const macros = [
+    { key: "calories",  head: "Cal",     unit: "kcal", target: currentTargets?.calories,  fmt: Math.round },
+    { key: "protein_g", head: "Protein", unit: "g",    target: currentTargets?.protein_g, fmt: round1 },
+    { key: "carbs_g",   head: "Carbs",   unit: "g",    target: currentTargets?.carbs_g,   fmt: round1 },
+    { key: "fat_g",     head: "Fat",     unit: "g",    target: currentTargets?.fat_g,     fmt: round1 },
+  ];
+
+  function pctClass(pct) {
+    if (pct >= 80) return "hw-green";
+    if (pct >= 60) return "hw-amber";
+    return "hw-red";
+  }
+
+  function macroCell(rawValue, macro) {
+    const val = Number(rawValue) || 0;
+    const tgt = macro.target || 0;
+    const hasVal = val > 0;
+    const hasTgt = tgt > 0;
+
+    const pct     = hasTgt && hasVal ? Math.min(Math.round((val / tgt) * 100), 100) : 0;
+    const color   = hasTgt && hasVal ? pctClass(pct) : "";
+    const isOver  = hasTgt && val > tgt;
+
+    const dispVal = hasVal ? macro.fmt(val) : "—";
+    const dispTgt = hasTgt ? `/${macro.fmt(tgt)}` : "";
+
+    return `<td class="hw-mac">
+      <div class="hw-bar">
+        ${color ? `<div class="hw-fill ${color}" style="height:${pct}%"></div>` : ""}
+      </div>
+      <div class="hw-nums">
+        <span class="hw-val${isOver ? " hw-over" : ""}">${dispVal}</span>
+        <span class="hw-tgt">${dispTgt}</span>
+      </div>
+    </td>`;
+  }
+
+  const headRow = macros.map((m) =>
+    `<th class="hw-mh">${m.head}<br><span class="hw-unit">${m.unit}</span></th>`
+  ).join("");
+
+  const bodyRows = dates.map((date) => {
+    const row  = byDate[date] || {};
+    const d    = parseDateLocal(date);
+    const isToday = date === todayStr;
+    const dName   = d.toLocaleDateString([], { weekday: "short" });
+    const dNum    = d.getDate();
+    return `<tr${isToday ? ' class="hw-today-row"' : ""}>
+      <td class="hw-day">
+        <div class="hw-dname${isToday ? " hw-today-lbl" : ""}">${dName}</div>
+        <div class="hw-dnum">${dNum}</div>
+      </td>
+      ${macros.map((m) => macroCell(row[m.key], m)).join("")}
+    </tr>`;
+  }).join("");
+
+  container.innerHTML = `
+    <h2 style="margin:0 0 12px">Last 7 Days</h2>
+    <div class="hw-scroll">
+      <table class="hw-table">
+        <thead><tr><th class="hw-dh"></th>${headRow}</tr></thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+    </div>`;
 }
 
 // --- Edit meal modal (Today tab only) ---

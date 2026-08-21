@@ -1217,6 +1217,92 @@ input[type="time"]#edit-meal-time:focus {
   overflow: visible;
 }
 
+/* ── History tab: 7-day macro overview table ───────────────────────────── */
+
+.hw-scroll {
+  overflow-x: auto;           /* safety scroll for very narrow viewports */
+}
+
+.hw-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* Day-label column */
+.hw-dh   { width: 44px; }
+.hw-day  { padding: 6px 6px 6px 0; vertical-align: middle; width: 44px; }
+.hw-dname {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.hw-dnum {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+/* Accent on today's row label */
+.hw-today-lbl { color: var(--accent); }
+.hw-today-row { background: transparent; }
+
+/* Macro column header */
+.hw-mh {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0 4px 8px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.hw-unit {
+  font-size: 0.68rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* Macro data cell */
+.hw-mac {
+  padding: 4px;
+  text-align: center;
+  vertical-align: top;
+}
+
+/* The rectangle: fixed height, fills from the bottom */
+.hw-bar {
+  height: 60px;
+  border-radius: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;   /* fill grows upward from the bottom */
+}
+
+.hw-fill {
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  transition: height 0.35s ease;
+}
+
+/* Traffic-light colours */
+.hw-fill.hw-green { background: var(--accent); }        /* ≥ 80% */
+.hw-fill.hw-amber { background: var(--warn); }           /* 60–80% */
+.hw-fill.hw-red   { background: var(--over); }           /* < 60% */
+
+/* Numbers below each bar */
+.hw-nums {
+  margin-top: 4px;
+  line-height: 1.3;
+  font-size: 0.7rem;
+}
+.hw-val  { display: block; font-weight: 700; color: var(--ink); }
+.hw-tgt  { display: block; color: var(--muted); font-size: 0.65rem; }
+
+/* Achieved > target: highlight the achieved number */
+.hw-over { color: var(--over); }
+
 /* --- Target calculator --- */
 
 .target-calc-box {
