@@ -734,7 +734,7 @@ async function loadToday() {
     hideDbBanner();
     todayTotal = data.total; // keep a reference for the "complete my day" feature
     updateSuggestCard();
-    renderTotals(document.getElementById("today-totals"), data.total, document.getElementById("today-summary"));
+    renderCircularTotals(document.getElementById("today-totals"), data.meals, data.total, document.getElementById("today-summary"));
     renderDayTimeline(document.getElementById("today-list"), data.meals, true, loadToday, true);
     renderAllFlags(document.getElementById("today-flags"), data.meals);
   } catch (err) {
@@ -816,6 +816,140 @@ function miniStatHtml(stat) {
   }</div>
       ${barHtml(stat, true)}
     </div>`;
+}
+
+// ── Circular arc intake display — Today tab ───────────────────────────────
+// 4 SVG circles (Calories, Protein, Carbs, Fat).  360° = daily target.
+// Each logged meal becomes a clockwise arc proportional to its share.
+// Time labels sit outside the ring at each arc's midpoint.
+// Excess beyond target wraps back from 0° in red.
+
+function renderCircularTotals(container, meals, total, summaryEl) {
+  const macros = [
+    { key: "calories",  label: "CALORIES", unit: "kcal", target: currentTargets?.calories,  color: "#2f6f4f", excessColor: "#dc2626" },
+    { key: "protein_g", label: "PROTEIN",  unit: "g",    target: currentTargets?.protein_g, color: "#1d4ed8", excessColor: "#dc2626" },
+    { key: "carbs_g",   label: "CARBS",    unit: "g",    target: currentTargets?.carbs_g,   color: "#b45309", excessColor: "#dc2626" },
+    { key: "fat_g",     label: "FAT",      unit: "g",    target: currentTargets?.fat_g,     color: "#6d28d9", excessColor: "#dc2626" },
+  ];
+
+  container.innerHTML = `<div class="circ-grid">${
+    macros.map(m => `<div class="circ-cell">${buildCircleSvg(m, meals, total)}</div>`).join("")
+  }</div>`;
+
+  if (summaryEl) {
+    const line = daySummaryLine(total);
+    summaryEl.textContent = line;
+    summaryEl.style.display = line ? "block" : "none";
+  }
+}
+
+function buildCircleSvg(macro, meals, total) {
+  const { key, label, unit, target, color, excessColor } = macro;
+
+  // SVG layout
+  const VW = 200, VH = 200;
+  const cx = 100, cy = 100;
+  const R  = 64;   // track radius
+  const SW = 15;   // stroke width of arcs
+  const LR = 94;   // radius where time labels sit
+
+  // "0° = top, clockwise" → x,y at any radius
+  function pt(deg, radius) {
+    const rad = (deg - 90) * Math.PI / 180;
+    return { x: cx + radius * Math.cos(rad), y: cy + radius * Math.sin(rad) };
+  }
+
+  // SVG arc path between two angles at radius R
+  function arcPath(a0, a1, stroke, opacity) {
+    const span = a1 - a0;
+    if (span < 0.15) return "";
+    const d = Math.min(span, 359.99);       // avoid degenerate full-circle path
+    const p1 = pt(a0, R);
+    const p2 = pt(a0 + d, R);
+    const large = d > 180 ? 1 : 0;
+    return `<path d="M${p1.x.toFixed(1)},${p1.y.toFixed(1)} A${R},${R} 0 ${large},1 ${p2.x.toFixed(1)},${p2.y.toFixed(1)}" fill="none" stroke="${stroke}" stroke-width="${SW}" stroke-linecap="butt" opacity="${opacity}"/>`;
+  }
+
+  // text-anchor based on horizontal position of label
+  function textAnchor(deg) {
+    const cos = Math.cos((deg - 90) * Math.PI / 180);
+    return cos > 0.2 ? "start" : cos < -0.2 ? "end" : "middle";
+  }
+
+  const actualRaw  = total[key] || 0;
+  const actual     = key === "calories" ? Math.round(actualRaw) : round1(actualRaw);
+  const targetVal  = target || 0;
+  const overTarget = targetVal > 0 && actualRaw > targetVal;
+  const centerColor = overTarget ? excessColor : color;
+  const centerSub   = targetVal
+    ? `/ ${key === "calories" ? Math.round(targetVal) : round1(targetVal)} ${unit}`
+    : unit;
+
+  // Only draw arcs for meals that contribute to this macro
+  const activeMeals = meals.filter(m => (m[key] || 0) > 0);
+
+  if (!activeMeals.length) {
+    return `<svg viewBox="0 0 ${VW} ${VH}" overflow="visible" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${color}" stroke-width="${SW}" opacity="0.12"/>
+      <text x="${cx}" y="${cy - 15}" text-anchor="middle" font-size="9" fill="${color}" letter-spacing="0.08em" font-family="inherit">${label}</text>
+      <text x="${cx}" y="${cy + 6}" text-anchor="middle" font-size="22" font-weight="700" fill="${color}" font-family="inherit">0</text>
+      <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="9.5" style="fill:var(--muted)" font-family="inherit">${centerSub}</text>
+    </svg>`;
+  }
+
+  const arcEls   = [];
+  const labelEls = [];
+  let cursor = 0;
+  const GAP = 2; // visual degrees between consecutive arcs
+
+  activeMeals.forEach((meal, i) => {
+    const value    = meal[key] || 0;
+    const rawAngle = targetVal > 0 ? (value / targetVal) * 360 : 0;
+    if (rawAngle < 0.5) return;
+
+    // Opacity gradient: earliest meal slightly translucent, latest fully opaque
+    const opacity = activeMeals.length === 1 ? 1 : 0.55 + 0.45 * (i / (activeMeals.length - 1));
+
+    // Portion within the target (≤360°)
+    if (cursor < 360) {
+      const normalEnd = Math.min(cursor + rawAngle, 360);
+      arcEls.push(arcPath(cursor, normalEnd, color, opacity));
+    }
+    // Excess portion (wraps back from 0° in red)
+    if (cursor + rawAngle > 360) {
+      const overStart = Math.max(cursor, 360) - 360;
+      const overEnd   = cursor + rawAngle - 360;
+      if (overEnd - overStart > 0.15) {
+        arcEls.push(arcPath(overStart, overEnd, excessColor, 0.88));
+      }
+    }
+
+    // Time label at midpoint of this arc
+    const midAngle = cursor + rawAngle / 2;
+    const midNorm  = midAngle > 360 ? midAngle - 360 : midAngle;
+
+    if (meal.created_at && rawAngle > 5) {
+      const timeStr   = new Date(meal.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const labelPt   = pt(midNorm, LR);
+      const connStart = pt(midNorm, R + SW / 2 + 3);
+      const ta        = textAnchor(midNorm);
+      // Thin connector line from arc edge to label
+      labelEls.push(`<line x1="${connStart.x.toFixed(1)}" y1="${connStart.y.toFixed(1)}" x2="${labelPt.x.toFixed(1)}" y2="${labelPt.y.toFixed(1)}" stroke="${color}" stroke-width="0.9" opacity="0.4"/>`);
+      // Time text
+      labelEls.push(`<text x="${labelPt.x.toFixed(1)}" y="${labelPt.y.toFixed(1)}" text-anchor="${ta}" dominant-baseline="middle" font-size="9" fill="${color}" font-weight="600" font-family="inherit">${timeStr}</text>`);
+    }
+
+    cursor += rawAngle + GAP;
+  });
+
+  return `<svg viewBox="0 0 ${VW} ${VH}" overflow="visible" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${color}" stroke-width="${SW}" opacity="0.12"/>
+    ${arcEls.join("\n    ")}
+    ${labelEls.join("\n    ")}
+    <text x="${cx}" y="${cy - 15}" text-anchor="middle" font-size="9" fill="${color}" letter-spacing="0.08em" font-family="inherit">${label}</text>
+    <text x="${cx}" y="${cy + 6}" text-anchor="middle" font-size="22" font-weight="700" fill="${centerColor}" font-family="inherit">${actual}</text>
+    <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="9.5" style="fill:var(--muted)" font-family="inherit">${centerSub}</text>
+  </svg>`;
 }
 
 let mealsById = {}; // last-rendered meals, keyed by id, so Edit can look up full item data without refetching
