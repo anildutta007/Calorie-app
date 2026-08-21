@@ -1204,8 +1204,9 @@ input[type="time"]#edit-meal-time:focus {
   justify-content: center;
   align-items: center;
   /* horizontal padding creates breathing room for time labels that
-     extend slightly outside the SVG viewBox via overflow:visible */
-  padding: 4px 20px 4px;
+     extend slightly outside the SVG viewBox via overflow:visible;
+     extra bottom padding accommodates the value·% sub-line on bottom arcs */
+  padding: 4px 20px 16px;
 }
 
 .circ-cell svg {

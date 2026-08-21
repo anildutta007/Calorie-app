@@ -933,10 +933,24 @@ function buildCircleSvg(macro, meals, total) {
       const labelPt   = pt(midNorm, LR);
       const connStart = pt(midNorm, R + SW / 2 + 3);
       const ta        = textAnchor(midNorm);
-      // Thin connector line from arc edge to label
-      labelEls.push(`<line x1="${connStart.x.toFixed(1)}" y1="${connStart.y.toFixed(1)}" x2="${labelPt.x.toFixed(1)}" y2="${labelPt.y.toFixed(1)}" stroke="${color}" stroke-width="0.9" opacity="0.4"/>`);
-      // Time text
+
+      // Second line: actual value + % of target
+      const dispVal  = key === "calories" ? Math.round(value) : round1(value);
+      const dispPct  = targetVal > 0 ? `${Math.round((value / targetVal) * 100)}%` : "";
+      const subLabel = dispPct ? `${dispVal} · ${dispPct}` : String(dispVal);
+
+      // For arcs in the bottom half the sub-line goes ABOVE the time label so it
+      // doesn't push outside the SVG viewBox; for the top/side half it goes below.
+      const inBottom = midNorm > 120 && midNorm < 240;
+      const subDY    = inBottom ? -11 : 11;  // relative to time-text y
+      const connEndY = inBottom ? labelPt.y + 5 : labelPt.y - 5; // connector meets top/bottom edge of time text
+
+      // Connector line from arc edge to time label
+      labelEls.push(`<line x1="${connStart.x.toFixed(1)}" y1="${connStart.y.toFixed(1)}" x2="${labelPt.x.toFixed(1)}" y2="${connEndY.toFixed(1)}" stroke="${color}" stroke-width="0.9" opacity="0.4"/>`);
+      // Time (primary)
       labelEls.push(`<text x="${labelPt.x.toFixed(1)}" y="${labelPt.y.toFixed(1)}" text-anchor="${ta}" dominant-baseline="middle" font-size="9" fill="${color}" font-weight="600" font-family="inherit">${timeStr}</text>`);
+      // Value · % (secondary)
+      labelEls.push(`<text x="${labelPt.x.toFixed(1)}" y="${(labelPt.y + subDY).toFixed(1)}" text-anchor="${ta}" dominant-baseline="middle" font-size="8" fill="${color}" font-family="inherit" opacity="0.8">${subLabel}</text>`);
     }
 
     cursor += rawAngle + GAP;
