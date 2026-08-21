@@ -735,7 +735,7 @@ async function loadToday() {
     todayTotal = data.total; // keep a reference for the "complete my day" feature
     updateSuggestCard();
     renderCircularTotals(document.getElementById("today-totals"), data.meals, data.total, document.getElementById("today-summary"));
-    renderDayTimeline(document.getElementById("today-list"), data.meals, true, loadToday, true);
+    renderDayTimeline(document.getElementById("today-list"), data.meals, true, loadToday, false);
     renderAllFlags(document.getElementById("today-flags"), data.meals);
   } catch (err) {
     showDbBanner(loadToday);
