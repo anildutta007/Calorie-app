@@ -2544,9 +2544,10 @@ function renderProgress(dayRows) {
   `;
 
   // Kick off AI summary async — fills in #ai-summary-card when ready.
-  // Exclude today (week[0]) so the AI only sees completed days — today's
-  // log is likely still in progress and would skew the analysis.
-  const weekForAi = week.slice(1); // drop today (index 0)
+  // week is ordered oldest→newest (index 0 = 6 days ago, index 6 = today).
+  // Drop the last slot (today) — today's log is still in progress and
+  // partial data would skew the AI's analysis.
+  const weekForAi = week.slice(0, -1); // drop today (last element)
   const loggedCountForAi = weekForAi.filter((d) => d.hasData).length;
   if (loggedCountForAi > 0) {
     loadProgressAiSummary(weekForAi);

@@ -291,7 +291,7 @@ async function generateProgressSummary(name, targets, week) {
     tool_choice: { type: "tool", name: "diet_review" },
     messages: [{
       role: "user",
-      content: `Review the last 7 days of diet data for ${name}.\n\n${targetLine}\nDays logged: ${loggedCount}/7\n\n${dayLines}`
+      content: `Review the following completed days of diet data for ${name}. Today is excluded because it is still in progress — base your analysis only on the days listed below.\n\n${targetLine}\nCompleted days logged: ${loggedCount}/${week.length}\n\n${dayLines}`
     }]
   });
 
