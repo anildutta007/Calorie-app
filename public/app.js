@@ -732,6 +732,8 @@ async function loadToday() {
     if (res.status >= 500) throw new Error(`Server error ${res.status}`);
     const data = await res.json();
     hideDbBanner();
+    todayTotal = data.total; // keep a reference for the "complete my day" feature
+    updateSuggestCard();
     renderTotals(document.getElementById("today-totals"), data.total, document.getElementById("today-summary"));
     renderDayTimeline(document.getElementById("today-list"), data.meals, true, loadToday, true);
     renderAllFlags(document.getElementById("today-flags"), data.meals);
@@ -817,6 +819,7 @@ function miniStatHtml(stat) {
 }
 
 let mealsById = {}; // last-rendered meals, keyed by id, so Edit can look up full item data without refetching
+let todayTotal = null; // {calories, protein_g, carbs_g, fat_g} — updated on every loadToday()
 
 function renderMealList(container, meals, showEdit) {
   meals.forEach((m) => (mealsById[m.id] = m));
@@ -1618,6 +1621,291 @@ function renderPrintRecipe(name, recipe) {
       </div>
     </div>`;
 }
+
+// ─── Complete My Day — suggest meals for remaining targets ──────────────────
+
+let suggestDiet          = "veg";
+let currentSuggestions   = null; // array returned by the API, kept for PDF/email
+let suggestionRemaining  = null; // {calories, protein_g, carbs_g, fat_g} remaining when suggestions were generated
+
+const suggestTriggerCard = document.getElementById("suggest-trigger-card");
+const suggestMealsBtn    = document.getElementById("suggest-meals-btn");
+const suggestStatusEl    = document.getElementById("suggest-status");
+const suggestPanel       = document.getElementById("suggest-panel");
+const suggestPanelBody   = document.getElementById("suggest-panel-body");
+const suggestPanelFooter = document.getElementById("suggest-panel-footer");
+const suggestPanelClose  = document.getElementById("suggest-panel-close");
+
+// Diet toggle inside the trigger card
+document.querySelectorAll("#suggest-diet-toggle .diet-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#suggest-diet-toggle .diet-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    suggestDiet = btn.dataset.diet;
+  });
+});
+
+// Show the trigger card only when a calorie target is set
+function updateSuggestCard() {
+  if (!suggestTriggerCard) return;
+  suggestTriggerCard.style.display = (currentTargets?.calories) ? "block" : "none";
+}
+
+// ── Open panel ────────────────────────────────────────────────────────────────
+function openSuggestPanelLoading(remaining) {
+  suggestPanel.style.display = "flex";
+  document.body.style.overflow = "hidden"; // prevent bg scroll while panel is open
+  suggestPanelFooter.style.display = "none";
+  suggestPanelBody.innerHTML = `
+    <div class="suggest-remaining-summary">
+      <div class="suggest-remaining-title">Remaining targets today</div>
+      <div class="suggest-remaining-chips">${remainingChipsHtml(remaining)}</div>
+    </div>
+    <div class="suggest-loading">
+      <div class="suggest-spinner"></div>
+      <div>Finding the best Indian meals for your remaining targets…</div>
+      <div class="muted" style="font-size:0.82rem;margin-top:6px">This usually takes 10–20 seconds</div>
+    </div>`;
+}
+
+function closeSuggestPanel() {
+  suggestPanel.style.display = "none";
+  document.body.style.overflow = "";
+}
+
+suggestPanelClose.addEventListener("click", closeSuggestPanel);
+
+// Close on Escape key
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && suggestPanel.style.display !== "none") closeSuggestPanel();
+});
+
+// ── Main button handler ───────────────────────────────────────────────────────
+suggestMealsBtn.addEventListener("click", async () => {
+  suggestStatusEl.textContent = "";
+
+  if (!currentTargets?.calories) {
+    suggestStatusEl.textContent = "Please set a daily target first (Goals tab → Daily Target).";
+    return;
+  }
+
+  // Compute what's left for today
+  const total = todayTotal || { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
+  const remaining = {
+    calories:  Math.max(0, (currentTargets.calories  || 0) - (total.calories  || 0)),
+    protein_g: Math.max(0, (currentTargets.protein_g || 0) - (total.protein_g || 0)),
+    carbs_g:   Math.max(0, (currentTargets.carbs_g   || 0) - (total.carbs_g   || 0)),
+    fat_g:     Math.max(0, (currentTargets.fat_g     || 0) - (total.fat_g     || 0)),
+  };
+
+  if (remaining.calories < 80) {
+    suggestStatusEl.textContent = "🎉 You've already met (or exceeded) your calorie target for today — great job!";
+    return;
+  }
+
+  // Open the panel immediately with a loading state
+  suggestionRemaining = remaining;
+  openSuggestPanelLoading(remaining);
+
+  setBusy(suggestMealsBtn, true, "Generating suggestions…");
+  try {
+    const res = await fetch("/api/meals/suggest-completion", {
+      method:  "POST",
+      headers: profileHeaders({ "Content-Type": "application/json" }),
+      body:    JSON.stringify({
+        remaining_calories:  remaining.calories,
+        remaining_protein_g: remaining.protein_g,
+        remaining_carbs_g:   remaining.carbs_g,
+        remaining_fat_g:     remaining.fat_g,
+        diet:                suggestDiet,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to generate suggestions.");
+    currentSuggestions = data.suggestions;
+    renderSuggestionsInPanel(data.suggestions, remaining);
+  } catch (err) {
+    suggestPanelBody.innerHTML += `<div class="flag over" style="margin:20px">⚠️ ${escapeHtml(err.message)}</div>`;
+    suggestPanelFooter.style.display = "none";
+  } finally {
+    setBusy(suggestMealsBtn, false, "🍽️ Suggest Meals for Rest of Day");
+  }
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function remainingChipsHtml(r) {
+  return [
+    { label: "Calories", value: `${Math.round(r.calories)} kcal` },
+    { label: "Protein",  value: `${Math.round(r.protein_g)}g`   },
+    { label: "Carbs",    value: `${Math.round(r.carbs_g)}g`     },
+    { label: "Fat",      value: `${Math.round(r.fat_g)}g`       },
+  ].map((x) => `<div class="suggest-chip"><strong>${x.value}</strong><span>${x.label}</span></div>`).join("");
+}
+
+// ── Render results in panel ───────────────────────────────────────────────────
+function renderSuggestionsInPanel(suggestions, remaining) {
+  suggestPanelBody.innerHTML = `
+    <div class="suggest-remaining-summary">
+      <div class="suggest-remaining-title">Remaining targets today</div>
+      <div class="suggest-remaining-chips">${remainingChipsHtml(remaining)}</div>
+    </div>
+    <div class="suggest-list">
+      ${suggestions.map(renderSuggestionCard).join("")}
+    </div>`;
+
+  // Wire recipe expand/collapse
+  suggestPanelBody.querySelectorAll(".suggest-recipe-toggle").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const card  = btn.closest(".suggest-card");
+      const block = card.querySelector(".suggest-recipe-block");
+      const open  = block.style.display !== "none";
+      block.style.display = open ? "none" : "block";
+      btn.textContent     = open ? "🍳 View Recipe" : "▲ Hide Recipe";
+    });
+  });
+
+  suggestPanelFooter.style.display = "block";
+}
+
+function renderSuggestionCard(s, i) {
+  const recipe = s.recipe || {};
+  const meta = [
+    recipe.serves        ? `Serves ${recipe.serves}`          : "",
+    recipe.prep_time_min ? `Prep ${recipe.prep_time_min} min` : "",
+    recipe.cook_time_min ? `Cook ${recipe.cook_time_min} min` : "",
+  ].filter(Boolean).join(" · ");
+
+  const ingHtml = recipe.ingredients?.length
+    ? `<div class="suggest-recipe-section"><strong>Ingredients</strong>
+         <ul>${recipe.ingredients.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>`
+    : "";
+  const stepsHtml = recipe.steps?.length
+    ? `<div class="suggest-recipe-section"><strong>Method</strong>
+         <ol>${recipe.steps.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ol></div>`
+    : "";
+
+  const hasRecipe = ingHtml || stepsHtml;
+
+  return `
+    <div class="suggest-card">
+      <div class="suggest-card-tag">Option ${i + 1}</div>
+      <h3 class="suggest-card-name">${escapeHtml(s.name)}</h3>
+      <p class="suggest-card-desc">${escapeHtml(s.description)}</p>
+      <div class="suggest-card-portion muted">${escapeHtml(s.portion_desc)}</div>
+      <div class="tl-macros" style="margin-top:10px">
+        <div class="tl-chip"><b>${Math.round(s.calories)}</b> kcal</div>
+        <div class="tl-chip">P <b>${round1(s.protein_g)}g</b></div>
+        <div class="tl-chip">C <b>${round1(s.carbs_g)}g</b></div>
+        <div class="tl-chip">F <b>${round1(s.fat_g)}g</b></div>
+      </div>
+      ${hasRecipe ? `
+        <button class="suggest-recipe-toggle secondary-btn" style="margin-top:14px;width:auto;padding:8px 14px">🍳 View Recipe</button>
+        <div class="suggest-recipe-block" style="display:none">
+          ${meta ? `<div class="muted suggest-recipe-meta">${meta}</div>` : ""}
+          ${ingHtml}
+          ${stepsHtml}
+        </div>` : ""}
+    </div>`;
+}
+
+// ── PDF download ──────────────────────────────────────────────────────────────
+document.getElementById("suggest-download-btn").addEventListener("click", () => {
+  if (!currentSuggestions?.length) return;
+  buildSuggestionPrintView(currentSuggestions, suggestionRemaining);
+  window.print();
+});
+
+function buildSuggestionPrintView(suggestions, remaining) {
+  const remHtml = remaining
+    ? `<div class="print-suggest-remaining">
+        Remaining targets: ${Math.round(remaining.calories || 0)} kcal ·
+        ${Math.round(remaining.protein_g || 0)}g protein ·
+        ${Math.round(remaining.carbs_g   || 0)}g carbs ·
+        ${Math.round(remaining.fat_g     || 0)}g fat
+       </div>`
+    : "";
+
+  const cardsHtml = suggestions.map((s, i) => {
+    const recipe = s.recipe || {};
+    const meta = [
+      recipe.serves        ? `Serves ${recipe.serves}`          : "",
+      recipe.prep_time_min ? `Prep ${recipe.prep_time_min} min` : "",
+      recipe.cook_time_min ? `Cook ${recipe.cook_time_min} min` : "",
+    ].filter(Boolean).join(" · ");
+    const ingHtml = recipe.ingredients?.length
+      ? `<div class="print-recipe-block"><strong>Ingredients</strong>
+           <ul>${recipe.ingredients.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>`
+      : "";
+    const stepsHtml = recipe.steps?.length
+      ? `<div class="print-recipe-block"><strong>Method</strong>
+           <ol>${recipe.steps.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ol></div>`
+      : "";
+    return `
+      <div class="print-recipe-card">
+        <div class="print-recipe-header">
+          <div>
+            <div class="print-suggest-tag">Option ${i + 1}</div>
+            <div class="print-recipe-name">${escapeHtml(s.name)}</div>
+            ${meta ? `<div class="print-recipe-meta">${meta}</div>` : ""}
+            <div class="print-recipe-meta">
+              ${escapeHtml(s.portion_desc)} ·
+              ${Math.round(s.calories)} kcal ·
+              P ${round1(s.protein_g)}g · C ${round1(s.carbs_g)}g · F ${round1(s.fat_g)}g
+            </div>
+          </div>
+        </div>
+        <p style="font-style:italic;color:#555;font-size:12px;margin:6px 0 8px">${escapeHtml(s.description)}</p>
+        <div class="print-recipe-body">
+          ${ingHtml}
+          ${stepsHtml}
+        </div>
+      </div>`;
+  }).join("");
+
+  document.getElementById("print-view").innerHTML = `
+    <div class="print-calendar-section">
+      <div class="print-cal-header">
+        <div class="print-cal-title">🍽️ Complete My Day — Meal Suggestions</div>
+        <div class="print-cal-meta">Generated by Dutta Food Planner &amp; Calorie Counter</div>
+      </div>
+      ${remHtml}
+    </div>
+    <div class="print-recipes-section">
+      ${cardsHtml}
+    </div>`;
+}
+
+// ── Email ─────────────────────────────────────────────────────────────────────
+document.getElementById("suggest-email-btn").addEventListener("click", async function () {
+  const btn       = this;
+  const emailInput = document.getElementById("suggest-email-input");
+  const statusEl   = document.getElementById("suggest-email-status");
+  const email      = (emailInput?.value || "").trim();
+
+  statusEl.textContent = "";
+  if (!email) { statusEl.textContent = "Please enter an email address."; return; }
+  if (!currentSuggestions?.length) return;
+
+  setBusy(btn, true, "Sending…");
+  try {
+    const res = await fetch("/api/meals/suggest-completion/email", {
+      method:  "POST",
+      headers: profileHeaders({ "Content-Type": "application/json" }),
+      body:    JSON.stringify({
+        email,
+        suggestions: currentSuggestions,
+        remaining:   suggestionRemaining,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to send email.");
+    statusEl.textContent = `✓ Sent to ${email}`;
+  } catch (err) {
+    statusEl.textContent = err.message;
+  } finally {
+    setBusy(btn, false, "📧 Send");
+  }
+});
 
 // --- Weight Goal tab ---
 

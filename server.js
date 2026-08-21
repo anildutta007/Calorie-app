@@ -28,7 +28,8 @@ const { buildRecipePack } = require("./recipes");
 const { calculateTargets, ACTIVITY_MULTIPLIERS } = require("./nutritionCalc");
 const { flagPortion } = require("./portions");
 const { calcIdealWeight, calcBmi, bmiCategory, calcWeightLossTargets, generateExercisePlan } = require("./weightGoal");
-const { buildMealPlanEmail } = require("./emailTemplate");
+const { buildMealPlanEmail, buildSuggestionEmail } = require("./emailTemplate");
+const { suggestCompletionMeals } = require("./mealSuggestion");
 const { Resend } = require("resend");
 
 const app = express();
@@ -607,6 +608,66 @@ app.get("/api/daily-quote", requireProfile, async (req, res) => {
   } catch (err) {
     console.error("daily-quote error:", err.message);
     res.status(500).json({ error: "Could not generate quote." });
+  }
+});
+
+// --- Suggest meals to complete daily targets ---
+
+// POST /api/meals/suggest-completion
+// Body: { remaining_calories, remaining_protein_g, remaining_carbs_g, remaining_fat_g, diet?, liked_foods?, avoided_foods? }
+// Protected by the app.use("/api/meals", requireProfile) middleware defined above.
+app.post("/api/meals/suggest-completion", async (req, res) => {
+  try {
+    const {
+      remaining_calories, remaining_protein_g, remaining_carbs_g, remaining_fat_g,
+      diet, liked_foods, avoided_foods,
+    } = req.body;
+    const suggestions = await suggestCompletionMeals({
+      remaining_calories:  Math.max(0, Number(remaining_calories)  || 0),
+      remaining_protein_g: Math.max(0, Number(remaining_protein_g) || 0),
+      remaining_carbs_g:   Math.max(0, Number(remaining_carbs_g)   || 0),
+      remaining_fat_g:     Math.max(0, Number(remaining_fat_g)     || 0),
+      diet:         diet || "veg",
+      liked_foods:  liked_foods  || null,
+      avoided_foods: avoided_foods || null,
+    });
+    res.json({ suggestions });
+  } catch (err) {
+    console.error("suggest-completion error:", err);
+    res.status(err.status || 500).json({ error: err.message || "Failed to generate suggestions." });
+  }
+});
+
+// POST /api/meals/suggest-completion/email
+// Body: { email: string, suggestions: Suggestion[], remaining: {calories, protein_g, carbs_g, fat_g} }
+app.post("/api/meals/suggest-completion/email", async (req, res) => {
+  try {
+    const { email, suggestions, remaining } = req.body;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Please enter a valid email address." });
+    }
+    if (!Array.isArray(suggestions) || !suggestions.length) {
+      return res.status(400).json({ error: "No suggestions to send." });
+    }
+    if (!process.env.RESEND_API_KEY) {
+      return res.status(503).json({ error: "Email service is not configured on the server." });
+    }
+    const html = buildSuggestionEmail(suggestions, remaining || null);
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const { error: sendError } = await resend.emails.send({
+      from:    "Dutta Food Planner <noreply@duttagroup.uk>",
+      to:      [email],
+      subject: "Your meal suggestions to complete today 🍽️",
+      html,
+    });
+    if (sendError) {
+      console.error("Resend error (suggest email):", sendError);
+      return res.status(502).json({ error: sendError.message || "Failed to send email." });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("suggest-completion/email error:", err);
+    res.status(err.status || 500).json({ error: err.message || "Failed to send email." });
   }
 });
 

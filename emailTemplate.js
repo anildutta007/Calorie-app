@@ -178,4 +178,97 @@ function buildMealPlanEmail(mealPlan, selectedRecipeNames, recipes) {
 </html>`;
 }
 
-module.exports = { buildMealPlanEmail };
+// ── Meal-completion suggestion email ─────────────────────────────────────────
+function buildSuggestionEmail(suggestions, remaining) {
+  const GREEN       = "#2f6f4f";
+  const GREEN_DARK  = "#1a4a2e";
+  const GREEN_LIGHT = "#e6f2ec";
+  const BORDER      = "#b0cbb8";
+
+  const remainHtml = remaining
+    ? `<div style="font-size:12px;color:#666;margin-top:4px">
+        Remaining when generated:
+        ${Math.round(remaining.calories  || 0)} kcal ·
+        ${Math.round(remaining.protein_g || 0)}g protein ·
+        ${Math.round(remaining.carbs_g   || 0)}g carbs ·
+        ${Math.round(remaining.fat_g     || 0)}g fat
+       </div>`
+    : "";
+
+  const tdChip = `display:inline-block;background:${GREEN_LIGHT};color:${GREEN_DARK};border-radius:4px;padding:3px 8px;font-size:12px;margin:2px 4px 2px 0;font-family:Arial,sans-serif;`;
+
+  const suggHtml = suggestions.map((s, i) => {
+    const recipe = s.recipe || {};
+    const meta = [
+      recipe.serves        ? `Serves ${recipe.serves}`            : "",
+      recipe.prep_time_min ? `Prep ${recipe.prep_time_min} min`   : "",
+      recipe.cook_time_min ? `Cook ${recipe.cook_time_min} min`   : "",
+    ].filter(Boolean).join(" · ");
+
+    const ingHtml = recipe.ingredients?.length
+      ? `<p style="margin:10px 0 4px;font-weight:700;font-size:13px;font-family:Arial,sans-serif">Ingredients</p>
+         <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.6;font-family:Arial,sans-serif">
+           ${recipe.ingredients.map((x) => `<li>${x}</li>`).join("")}
+         </ul>`
+      : "";
+    const stepsHtml = recipe.steps?.length
+      ? `<p style="margin:10px 0 4px;font-weight:700;font-size:13px;font-family:Arial,sans-serif">Method</p>
+         <ol style="margin:0;padding-left:18px;font-size:13px;line-height:1.6;font-family:Arial,sans-serif">
+           ${recipe.steps.map((x) => `<li style="margin-bottom:4px">${x}</li>`).join("")}
+         </ol>`
+      : "";
+
+    return `
+      <div style="margin-bottom:24px;padding:16px;background:#f9fdf9;border:1px solid ${BORDER};border-radius:8px">
+        <div style="font-size:11px;font-weight:700;color:${GREEN};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;font-family:Arial,sans-serif">
+          Option ${i + 1}
+        </div>
+        <h3 style="margin:0 0 4px;font-size:16px;color:${GREEN_DARK};font-family:Arial,sans-serif">${s.name}</h3>
+        <p style="margin:0 0 8px;font-size:13px;color:#555;font-style:italic;font-family:Arial,sans-serif">${s.description}</p>
+        ${meta ? `<div style="font-size:12px;color:#777;margin-bottom:10px;font-family:Arial,sans-serif">${meta}</div>` : ""}
+        <div style="margin-bottom:10px">
+          <span style="${tdChip}"><strong>${Math.round(s.calories)}</strong> kcal</span>
+          <span style="${tdChip}"><strong>${Math.round(s.protein_g)}g</strong> protein</span>
+          <span style="${tdChip}"><strong>${Math.round(s.carbs_g)}g</strong> carbs</span>
+          <span style="${tdChip}"><strong>${Math.round(s.fat_g)}g</strong> fat</span>
+        </div>
+        <div style="font-size:12px;color:#888;margin-bottom:12px;font-family:Arial,sans-serif">${s.portion_desc}</div>
+        ${ingHtml}
+        ${stepsHtml}
+      </div>`;
+  }).join("");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#f4f4f0;font-family:Arial,sans-serif">
+  <div style="max-width:640px;margin:24px auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+
+    <div style="background:${GREEN};padding:20px 24px">
+      <div style="font-size:20px;font-weight:700;color:white;font-family:Arial,sans-serif">🍽️ Complete My Day</div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.8);margin-top:3px;font-family:Arial,sans-serif">
+        Dutta Food Planner · Meal suggestions for your remaining targets
+      </div>
+    </div>
+
+    <div style="padding:16px 24px;border-bottom:1px solid #eee;background:#f9fdf9">
+      <div style="font-size:15px;font-weight:700;color:${GREEN_DARK};font-family:Arial,sans-serif">
+        Your personalised meal suggestions
+      </div>
+      ${remainHtml}
+    </div>
+
+    <div style="padding:20px 24px">
+      ${suggHtml}
+    </div>
+
+    <div style="background:#f0f4f1;padding:14px 24px;text-align:center;font-size:11px;color:#888;font-family:Arial,sans-serif">
+      Sent from Dutta Food Planner &amp; Calorie Counter ·
+      <a href="https://calorie-app-sweg.vercel.app" style="color:${GREEN}">Open app</a>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+module.exports = { buildMealPlanEmail, buildSuggestionEmail };

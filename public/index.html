@@ -125,6 +125,19 @@
         <div id="today-summary" class="day-summary"></div>
       </div>
       <div id="today-flags"></div>
+
+      <!-- Complete My Day — suggest meals for remaining targets (shown only when a daily target is set) -->
+      <div class="card suggest-trigger-card" id="suggest-trigger-card" style="display:none">
+        <h2>Complete My Day 🍽️</h2>
+        <p class="muted" style="margin:0 0 12px">Get AI-suggested Indian meals that cover your remaining calorie &amp; macro targets for today.</p>
+        <div class="diet-toggle" id="suggest-diet-toggle">
+          <button type="button" class="diet-btn active" data-diet="veg">🌱 Vegetarian</button>
+          <button type="button" class="diet-btn" data-diet="non-veg">🍗 Non-Veg</button>
+        </div>
+        <button id="suggest-meals-btn" class="primary-btn" style="margin-top:12px">🍽️ Suggest Meals for Rest of Day</button>
+        <div id="suggest-status" class="muted" style="margin-top:8px"></div>
+      </div>
+
       <div id="today-list" class="meal-list"></div>
     </section>
 
@@ -277,6 +290,25 @@
       <button id="edit-meal-add-item-btn" class="secondary-btn" type="button">+ Add Item</button>
       <button id="edit-meal-save-btn" class="primary-btn" type="button">Save Changes</button>
       <div id="edit-meal-error" class="flag over" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- MEAL SUGGESTION PANEL — full-screen sheet, slides over the app -->
+  <div id="suggest-panel" class="suggest-panel" style="display:none" role="dialog" aria-label="Meal suggestions">
+    <div class="suggest-panel-header">
+      <button id="suggest-panel-close" class="suggest-panel-back" type="button" aria-label="Close">&#8592; Back</button>
+      <h2>Complete My Day</h2>
+    </div>
+    <div id="suggest-panel-body" class="suggest-panel-body">
+      <!-- populated by JS -->
+    </div>
+    <div class="suggest-panel-footer" id="suggest-panel-footer" style="display:none">
+      <button id="suggest-download-btn" class="secondary-btn" type="button">📄 Download / Print PDF</button>
+      <div class="email-plan-row" style="margin-top:10px">
+        <input id="suggest-email-input" type="email" placeholder="your@email.com" autocomplete="email" />
+        <button id="suggest-email-btn" class="secondary-btn" type="button">📧 Send</button>
+      </div>
+      <div id="suggest-email-status" class="muted" style="margin-top:6px"></div>
     </div>
   </div>
 
