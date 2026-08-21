@@ -2553,57 +2553,6 @@ function renderProgress(dayRows) {
     return loggedDays.reduce((s, d) => s + d[field], 0) / loggedCount;
   }
 
-  // Compact label for bar tops: ≥1000 shown as "1.5k" to fit narrow columns
-  function fmtBarVal(val, key) {
-    if (!val) return "—";
-    if (key === "calories" || key === "sodium_mg") {
-      return val >= 1000 ? `${(val / 1000).toFixed(1)}k` : String(Math.round(val));
-    }
-    return String(round1(val));
-  }
-
-  const metrics = [
-    { key: "calories",  label: "Calories", unit: " cal", mode: "ceiling", target: currentTargets?.calories },
-    { key: "protein_g", label: "Protein",  unit: "g",    mode: "floor",   target: currentTargets?.protein_g },
-    { key: "carbs_g",   label: "Carbs",    unit: "g",    mode: "ceiling", target: currentTargets?.carbs_g },
-    { key: "fat_g",     label: "Fat",      unit: "g",    mode: "ceiling", target: currentTargets?.fat_g },
-  ];
-
-  function chartHtml(metric) {
-    const values = week.map((d) => d[metric.key]);
-    // Max bar height = target (if set) or highest recorded value, minimum 1 to avoid divide-by-zero
-    const maxVal = Math.max(metric.target || 0, ...values, 1);
-    const avgVal = avg(metric.key);
-    const avgStr = metric.key === "calories" ? Math.round(avgVal) : round1(avgVal);
-
-    const barsHtml = week
-      .map((d) => {
-        const val = d[metric.key];
-        // At least 2% height so a tiny value still shows as a sliver; 0 shows nothing
-        const pct = d.hasData && val > 0 ? Math.max(Math.round((val / maxVal) * 100), 2) : 0;
-        const status = d.hasData && val > 0 ? (macroStatus(val, metric.target, metric.mode) || "good") : "empty";
-        const isToday = d.date === todayStr;
-        return `
-          <div class="prog-bar-col">
-            <div class="prog-bar-val${!d.hasData || val === 0 ? " prog-bar-val-empty" : ""}">${d.hasData ? fmtBarVal(val, metric.key) : "—"}</div>
-            <div class="prog-bar-wrap">
-              <div class="prog-bar prog-bar-${status}" style="height:${pct}%"></div>
-            </div>
-            <div class="prog-bar-day${isToday ? " prog-bar-day-today" : ""}">${d.dayLabel}</div>
-          </div>`;
-      })
-      .join("");
-
-    return `
-      <div class="card">
-        <div class="prog-chart-header">
-          <div class="prog-chart-title">${metric.label}</div>
-          ${loggedCount ? `<div class="muted">${avgStr}${metric.unit} avg · ${loggedCount}d</div>` : ""}
-        </div>
-        <div class="prog-bars">${barsHtml}</div>
-      </div>`;
-  }
-
   // Nutrient summary — only shown once meals with the new nutrient data exist
   const avgFiber  = avg("fiber_g");
   const avgSugar  = avg("sugar_g");
@@ -2637,7 +2586,6 @@ function renderProgress(dayRows) {
         <div class="ai-shimmer ai-shimmer-line" style="width:75%"></div>
       </div>
     </div>
-    ${metrics.map(chartHtml).join("")}
     ${nutrientsHtml}
   `;
 
