@@ -1229,8 +1229,28 @@ input[type="time"]#edit-meal-time:focus {
   table-layout: fixed;
 }
 
-/* Day-label column */
-.hw-dh   { width: 44px; }
+/* Macro row label — left column in the transposed layout */
+.hw-row-label {
+  padding: 4px 10px 4px 0;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.hw-row-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.hw-row-unit {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+/* Day column header — accent on today */
+.hw-today-col .hw-dname { color: var(--accent); }
+
+/* Day-label column (kept for reference) */
+.hw-dh   { }
 .hw-day  { padding: 6px 6px 6px 0; vertical-align: middle; width: 44px; }
 .hw-dname {
   font-size: 0.78rem;

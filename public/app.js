@@ -1141,7 +1141,7 @@ async function loadHistory() {
 
 // ── 7-day macro overview table (Progress tab) ────────────────────────────────
 // Called directly from renderProgress() with the data it already fetched.
-// Layout: rows = days, columns = Cal / Protein / Carbs / Fat.
+// Layout: columns = days (7), rows = macros (Calories / Protein / Carbs / Fat).
 // Each cell: target label above the rectangle, achieved value + % inside,
 // fill colour green ≥80%, amber 60–80%, red <60%.
 // If the achieved value exceeds the target the rectangle shows criss-cross lines.
@@ -1161,10 +1161,10 @@ function render7DayTable(container, dayRows) {
   dayRows.forEach((r) => (byDate[r.date] = r));
 
   const macros = [
-    { key: "calories",  head: "Cal",     unit: "kcal", target: currentTargets?.calories,  fmt: Math.round },
-    { key: "protein_g", head: "Protein", unit: "g",    target: currentTargets?.protein_g, fmt: round1 },
-    { key: "carbs_g",   head: "Carbs",   unit: "g",    target: currentTargets?.carbs_g,   fmt: round1 },
-    { key: "fat_g",     head: "Fat",     unit: "g",    target: currentTargets?.fat_g,     fmt: round1 },
+    { key: "calories",  head: "Calories", unit: "kcal", target: currentTargets?.calories,  fmt: Math.round },
+    { key: "protein_g", head: "Protein",  unit: "g",    target: currentTargets?.protein_g, fmt: round1 },
+    { key: "carbs_g",   head: "Carbs",    unit: "g",    target: currentTargets?.carbs_g,   fmt: round1 },
+    { key: "fat_g",     head: "Fat",      unit: "g",    target: currentTargets?.fat_g,     fmt: round1 },
   ];
 
   function fillColor(rawPct) {
@@ -1173,10 +1173,12 @@ function render7DayTable(container, dayRows) {
     return "hw-red";
   }
 
-  function macroCell(rawValue, macro) {
-    const val    = Number(rawValue) || 0;
+  // Looks up the value for a specific date+macro combination
+  function macroCell(date, macro) {
+    const row    = byDate[date] || {};
+    const val    = Number(row[macro.key]) || 0;
     const tgt    = macro.target || 0;
-    const hasVal = val > 0;
+    const hasVal = Boolean(byDate[date]) && val > 0;
     const hasTgt = tgt > 0;
 
     const rawPct  = hasTgt && hasVal ? Math.round((val / tgt) * 100) : 0;
@@ -1184,10 +1186,10 @@ function render7DayTable(container, dayRows) {
     const isOver  = hasTgt && val > tgt;
     const color   = hasTgt && hasVal ? fillColor(rawPct) : "";
 
-    // Target shown above the rectangle (spacer keeps rows aligned when no target)
-    const tgtLabel = `<div class="hw-tgt-above">${hasTgt ? `${macro.fmt(tgt)} ${macro.unit}` : ""}</div>`;
+    // Target above bar — unit omitted here, shown in the row label instead
+    const tgtLabel = `<div class="hw-tgt-above">${hasTgt ? macro.fmt(tgt) : ""}</div>`;
 
-    // Text inside: white when the fill covers the centre (fillPct ≥ 50), ink otherwise
+    // Text inside: white when fill covers the centre (fillPct ≥ 50), ink otherwise
     const textCls = !hasVal       ? "hw-btext hw-btext-empty"
                   : fillPct >= 50 ? "hw-btext hw-btext-light"
                   :                 "hw-btext hw-btext-dark";
@@ -1207,22 +1209,27 @@ function render7DayTable(container, dayRows) {
     </td>`;
   }
 
-  const headRow = macros.map((m) =>
-    `<th class="hw-mh">${m.head}<br><span class="hw-unit">${m.unit}</span></th>`
-  ).join("");
-
-  const bodyRows = dates.map((date) => {
-    const row     = byDate[date] || {};
+  // Header: empty label col + one column per day
+  const headCols = dates.map((date) => {
     const d       = parseDateLocal(date);
     const isToday = date === todayStr;
     const dName   = d.toLocaleDateString([], { weekday: "short" });
     const dNum    = d.getDate();
-    return `<tr${isToday ? ' class="hw-today-row"' : ""}>
-      <td class="hw-day">
-        <div class="hw-dname${isToday ? " hw-today-lbl" : ""}">${dName}</div>
-        <div class="hw-dnum">${dNum}</div>
+    return `<th class="hw-mh${isToday ? " hw-today-col" : ""}">
+      <div class="hw-dname${isToday ? " hw-today-lbl" : ""}">${dName}</div>
+      <div class="hw-dnum">${dNum}</div>
+    </th>`;
+  }).join("");
+
+  // Body: one row per macro
+  const bodyRows = macros.map((macro) => {
+    const cells = dates.map((date) => macroCell(date, macro)).join("");
+    return `<tr>
+      <td class="hw-row-label">
+        <div class="hw-row-name">${macro.head}</div>
+        <div class="hw-row-unit">${macro.unit}</div>
       </td>
-      ${macros.map((m) => macroCell(row[m.key], m)).join("")}
+      ${cells}
     </tr>`;
   }).join("");
 
@@ -1230,7 +1237,7 @@ function render7DayTable(container, dayRows) {
     <h2 style="margin:0 0 14px">Last 7 Days</h2>
     <div class="hw-scroll">
       <table class="hw-table">
-        <thead><tr><th class="hw-dh"></th>${headRow}</tr></thead>
+        <thead><tr><th class="hw-dh"></th>${headCols}</tr></thead>
         <tbody>${bodyRows}</tbody>
       </table>
     </div>`;
