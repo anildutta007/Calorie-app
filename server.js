@@ -21,6 +21,7 @@ const {
   getProfileBio,
   setProfileBio,
   getProgressSummary,
+  getAdminDailyUsage,
 } = require("./db");
 const { analyzeMealText, analyzeMealPhoto, estimateItemMacros, generateDailyQuote, generateProgressSummary } = require("./nutrition");
 const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mealplan");
@@ -678,6 +679,161 @@ app.get("/api/health", (req, res) => {
 
 app.get("/api/version", (req, res) => {
   res.json({ version: require("./package.json").version });
+});
+
+// ── Admin: daily usage report (called by Vercel Cron at 00:30 UTC = 06:00 IST) ──
+// Secured with the CRON_SECRET env var — Vercel sends it automatically as
+// "Authorization: Bearer <CRON_SECRET>" on every cron invocation.
+
+app.get("/api/admin/daily-report", async (req, res) => {
+  // Verify the caller is the Vercel cron scheduler (or an authorised manual trigger)
+  const secret = process.env.CRON_SECRET;
+  if (secret) {
+    const auth = req.headers["authorization"] || "";
+    if (auth !== `Bearer ${secret}`) {
+      return res.status(401).json({ error: "Unauthorised." });
+    }
+  }
+
+  try {
+    // Report covers yesterday in UTC (cron fires at 00:30 UTC, so yesterday = the
+    // just-completed Indian calendar day)
+    const now = new Date();
+    const yest = new Date(now);
+    yest.setUTCDate(yest.getUTCDate() - 1);
+    const reportDate = yest.toISOString().slice(0, 10);
+
+    const profiles = await getAdminDailyUsage(reportDate);
+    const activeCount = profiles.filter((p) => p.meal_count > 0).length;
+
+    // ── Build HTML email ────────────────────────────────────────────────────
+    function pct(val, tgt) {
+      if (!tgt || !val) return "—";
+      return `${Math.round((val / tgt) * 100)}%`;
+    }
+    function fmt(n, dp = 0) {
+      if (!n) return "0";
+      return dp ? Number(n).toFixed(dp) : Math.round(n);
+    }
+    function bar(val, tgt) {
+      if (!tgt || !val) return "";
+      const p = Math.min(Math.round((val / tgt) * 100), 100);
+      const color = p >= 80 ? "#16a34a" : p >= 60 ? "#d97706" : "#dc2626";
+      return `<div style="background:#e5e7eb;border-radius:4px;height:6px;width:80px;display:inline-block;vertical-align:middle;margin-left:6px">
+                <div style="background:${color};border-radius:4px;height:6px;width:${p}%"></div>
+              </div>`;
+    }
+
+    const rowsHtml = profiles.map((p) => {
+      const active = p.meal_count > 0;
+      const rowBg  = active ? "#f0fdf4" : "#fef2f2";
+      const badge  = active
+        ? `<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">✓ Logged</span>`
+        : `<span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">✗ No data</span>`;
+
+      const calLine = active
+        ? `${fmt(p.calories)} kcal ${bar(p.calories, p.target_calories)} ${pct(p.calories, p.target_calories)} of ${fmt(p.target_calories)} target`
+        : "—";
+
+      const macroLine = active
+        ? `P: ${fmt(p.protein_g, 1)}g&nbsp;&nbsp;C: ${fmt(p.carbs_g, 1)}g&nbsp;&nbsp;F: ${fmt(p.fat_g, 1)}g`
+        : "—";
+
+      const lastActive = p.last_active_date
+        ? (p.last_active_date === reportDate ? "Yesterday" : p.last_active_date)
+        : "Never";
+
+      const engageBadge = `${p.active_days_7}/7 days active`;
+
+      return `
+        <tr style="background:${rowBg};border-bottom:1px solid #e5e7eb">
+          <td style="padding:12px 14px;font-weight:700;font-size:14px;color:#111">${p.name}</td>
+          <td style="padding:12px 14px;text-align:center">${badge}</td>
+          <td style="padding:12px 14px;font-size:13px;color:#374151">${calLine}</td>
+          <td style="padding:12px 14px;font-size:13px;color:#374151;white-space:nowrap">${macroLine}</td>
+          <td style="padding:12px 14px;font-size:12px;color:#6b7280;text-align:center">${p.meal_count} meal${p.meal_count !== 1 ? "s" : ""}</td>
+          <td style="padding:12px 14px;font-size:12px;color:#6b7280;text-align:center">${lastActive}</td>
+          <td style="padding:12px 14px;font-size:12px;color:#6b7280;text-align:center">${engageBadge}</td>
+        </tr>`;
+    }).join("");
+
+    const displayDate = new Date(reportDate).toLocaleDateString("en-IN", {
+      weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Kolkata",
+    });
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:system-ui,sans-serif">
+<div style="max-width:780px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+
+  <!-- Header -->
+  <div style="background:#2f6f4f;padding:28px 32px">
+    <div style="font-size:22px;font-weight:700;color:#fff">📊 Daily Usage Report</div>
+    <div style="font-size:14px;color:#a7f3d0;margin-top:4px">${displayDate} &nbsp;·&nbsp; Calorie Tracker Admin</div>
+  </div>
+
+  <!-- Summary banner -->
+  <div style="padding:16px 32px;background:#f0fdf4;border-bottom:1px solid #d1fae5;display:flex;gap:32px">
+    <div>
+      <div style="font-size:28px;font-weight:800;color:#15803d">${activeCount}</div>
+      <div style="font-size:12px;color:#374151">Profiles active</div>
+    </div>
+    <div>
+      <div style="font-size:28px;font-weight:800;color:#374151">${profiles.length}</div>
+      <div style="font-size:12px;color:#374151">Total profiles</div>
+    </div>
+    <div>
+      <div style="font-size:28px;font-weight:800;color:#b91c1c">${profiles.length - activeCount}</div>
+      <div style="font-size:12px;color:#374151">No activity yesterday</div>
+    </div>
+  </div>
+
+  <!-- Profile table -->
+  <div style="padding:24px 32px 8px">
+    <table style="width:100%;border-collapse:collapse;font-family:system-ui,sans-serif">
+      <thead>
+        <tr style="border-bottom:2px solid #e5e7eb">
+          <th style="padding:8px 14px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Profile</th>
+          <th style="padding:8px 14px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Status</th>
+          <th style="padding:8px 14px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Calories</th>
+          <th style="padding:8px 14px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Macros (P/C/F)</th>
+          <th style="padding:8px 14px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Meals</th>
+          <th style="padding:8px 14px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Last Active</th>
+          <th style="padding:8px 14px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em">7-Day</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  </div>
+
+  <!-- Footer -->
+  <div style="padding:20px 32px 28px;font-size:12px;color:#9ca3af;border-top:1px solid #f3f4f6;margin-top:16px">
+    Sent automatically at 06:00 IST · Calorie Tracker · <a href="mailto:noreply@duttagroup.uk" style="color:#9ca3af">noreply@duttagroup.uk</a>
+  </div>
+</div>
+</body></html>`;
+
+    // ── Send via Resend ─────────────────────────────────────────────────────
+    if (!process.env.RESEND_API_KEY) {
+      console.error("[daily-report] RESEND_API_KEY not set — email not sent.");
+      return res.json({ ok: true, profiles: profiles.length, active: activeCount, emailSent: false, note: "RESEND_API_KEY missing" });
+    }
+
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    await resend.emails.send({
+      from: "Calorie Tracker <noreply@duttagroup.uk>",
+      to: "anildutta007@gmail.com",
+      subject: `📊 Daily Report ${reportDate} — ${activeCount}/${profiles.length} active`,
+      html,
+    });
+
+    console.log(`[daily-report] Sent for ${reportDate}: ${activeCount}/${profiles.length} active`);
+    res.json({ ok: true, reportDate, profiles: profiles.length, active: activeCount, emailSent: true });
+
+  } catch (err) {
+    console.error("[daily-report] Error:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // When run directly (npm start, or Render), start a normal listening server.

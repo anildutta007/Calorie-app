@@ -393,6 +393,44 @@ async function getProgressSummary(profileId, days) {
   return rows;
 }
 
+// --- Admin: daily usage report across all profiles for a given date ---
+// Returns one row per profile with that day's meal totals and their targets.
+
+async function getAdminDailyUsage(date) {
+  await init();
+
+  // Date 7 days prior, for the "active last 7 days" engagement metric
+  const d7 = new Date(date);
+  d7.setDate(d7.getDate() - 6);
+  const weekStart = d7.toISOString().slice(0, 10);
+
+  const rows = await sql`
+    SELECT
+      p.id,
+      p.name,
+      p.target_calories,
+      p.target_protein_g,
+      p.target_carbs_g,
+      p.target_fat_g,
+      /* yesterday's totals */
+      COALESCE(SUM(m.calories)::real,   0)  AS calories,
+      COALESCE(SUM(m.protein_g)::real,  0)  AS protein_g,
+      COALESCE(SUM(m.carbs_g)::real,    0)  AS carbs_g,
+      COALESCE(SUM(m.fat_g)::real,      0)  AS fat_g,
+      COUNT(m.id)::int                      AS meal_count,
+      /* last date the profile logged anything */
+      (SELECT MAX(m2.date) FROM meals m2 WHERE m2.profile_id = p.id)  AS last_active_date,
+      /* number of distinct days logged in the last 7 days */
+      (SELECT COUNT(DISTINCT m3.date)::int FROM meals m3
+         WHERE m3.profile_id = p.id AND m3.date >= ${weekStart})       AS active_days_7
+    FROM profiles p
+    LEFT JOIN meals m ON m.profile_id = p.id AND m.date = ${date}
+    GROUP BY p.id, p.name, p.target_calories, p.target_protein_g, p.target_carbs_g, p.target_fat_g
+    ORDER BY p.name ASC
+  `;
+  return rows;
+}
+
 module.exports = {
   insertMeal,
   getMeal,
@@ -411,4 +449,5 @@ module.exports = {
   getProfileBio,
   setProfileBio,
   getProgressSummary,
+  getAdminDailyUsage,
 };

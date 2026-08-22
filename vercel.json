@@ -5,5 +5,11 @@
   ],
   "routes": [
     { "src": "/(.*)", "dest": "server.js" }
+  ],
+  "crons": [
+    {
+      "path": "/api/admin/daily-report",
+      "schedule": "30 0 * * *"
+    }
   ]
 }
