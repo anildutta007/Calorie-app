@@ -891,9 +891,9 @@ function buildCircleSvg(macro, meals, total) {
   if (!activeMeals.length) {
     return `<svg viewBox="0 0 ${VW} ${VH}" overflow="visible" xmlns="http://www.w3.org/2000/svg">
       <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${color}" stroke-width="${SW}" opacity="0.12"/>
-      <text x="${cx}" y="${cy - 15}" text-anchor="middle" font-size="9" fill="${color}" letter-spacing="0.08em" font-family="inherit">${label}</text>
+      <text x="${cx}" y="${cy - 15}" text-anchor="middle" font-size="12" fill="${color}" letter-spacing="0.08em" font-family="inherit">${label}</text>
       <text x="${cx}" y="${cy + 6}" text-anchor="middle" font-size="22" font-weight="700" fill="${color}" font-family="inherit">0</text>
-      <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="9.5" style="fill:var(--muted)" font-family="inherit">${centerSub}</text>
+      <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="12" style="fill:var(--muted)" font-family="inherit">${centerSub}</text>
     </svg>`;
   }
 
@@ -948,9 +948,9 @@ function buildCircleSvg(macro, meals, total) {
       // Connector line from arc edge to time label
       labelEls.push(`<line x1="${connStart.x.toFixed(1)}" y1="${connStart.y.toFixed(1)}" x2="${labelPt.x.toFixed(1)}" y2="${connEndY.toFixed(1)}" stroke="${color}" stroke-width="0.9" opacity="0.4"/>`);
       // Time (primary)
-      labelEls.push(`<text x="${labelPt.x.toFixed(1)}" y="${labelPt.y.toFixed(1)}" text-anchor="${ta}" dominant-baseline="middle" font-size="9" fill="${color}" font-weight="600" font-family="inherit">${timeStr}</text>`);
+      labelEls.push(`<text x="${labelPt.x.toFixed(1)}" y="${labelPt.y.toFixed(1)}" text-anchor="${ta}" dominant-baseline="middle" font-size="12" fill="${color}" font-weight="600" font-family="inherit">${timeStr}</text>`);
       // Value · % (secondary)
-      labelEls.push(`<text x="${labelPt.x.toFixed(1)}" y="${(labelPt.y + subDY).toFixed(1)}" text-anchor="${ta}" dominant-baseline="middle" font-size="8" fill="${color}" font-family="inherit" opacity="0.8">${subLabel}</text>`);
+      labelEls.push(`<text x="${labelPt.x.toFixed(1)}" y="${(labelPt.y + subDY).toFixed(1)}" text-anchor="${ta}" dominant-baseline="middle" font-size="10.5" fill="${color}" font-family="inherit" opacity="0.8">${subLabel}</text>`);
     }
 
     cursor += rawAngle + GAP;
@@ -960,9 +960,9 @@ function buildCircleSvg(macro, meals, total) {
     <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${color}" stroke-width="${SW}" opacity="0.12"/>
     ${arcEls.join("\n    ")}
     ${labelEls.join("\n    ")}
-    <text x="${cx}" y="${cy - 15}" text-anchor="middle" font-size="9" fill="${color}" letter-spacing="0.08em" font-family="inherit">${label}</text>
+    <text x="${cx}" y="${cy - 15}" text-anchor="middle" font-size="12" fill="${color}" letter-spacing="0.08em" font-family="inherit">${label}</text>
     <text x="${cx}" y="${cy + 6}" text-anchor="middle" font-size="22" font-weight="700" fill="${centerColor}" font-family="inherit">${actual}</text>
-    <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="9.5" style="fill:var(--muted)" font-family="inherit">${centerSub}</text>
+    <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="12" style="fill:var(--muted)" font-family="inherit">${centerSub}</text>
   </svg>`;
 }
 
@@ -1167,7 +1167,7 @@ function render7DayTable(container, dayRows) {
 
   // ── SVG bar chart for one macro ───────────────────────────────────────────
   function barChart(macro) {
-    const W = 260, H = 108, PL = 34, PR = 6, PT = 8, PB = 20;
+    const W = 260, H = 116, PL = 34, PR = 6, PT = 16, PB = 20;
     const iW = W - PL - PR, iH = H - PT - PB;
 
     // null = day not logged; treat 0 as null too
@@ -1187,12 +1187,13 @@ function render7DayTable(container, dayRows) {
     const xCenter = (i) => PL + slotW * i + slotW / 2;
     const yp      = (v) => PT + iH * (1 - v / ceiling);
 
+    // Compact value formatter (used for value labels above bars too)
+    const fmtY = (v) =>
+      macro.key === "calories" && v >= 1000 ? `${(v / 1000).toFixed(1)}k` : Math.round(v);
+
     // Y-axis grid lines + labels (4 ticks)
     const TICKS = 4;
     const step  = ceiling / TICKS;
-    const fmtY  = (v) =>
-      macro.key === "calories" && v >= 1000 ? `${(v / 1000).toFixed(1)}k` : Math.round(v);
-
     const gridLines = Array.from({ length: TICKS }, (_, k) => {
       const v = step * (k + 1);
       const y = yp(v).toFixed(1);
@@ -1202,21 +1203,40 @@ function render7DayTable(container, dayRows) {
                 font-size="7.5" fill="var(--muted)">${fmtY(v)}</text>`;
     }).join("");
 
-    // Dashed target line
+    // Dashed target line + target value label on the right end
+    const tgtY = tgt > 0 ? yp(tgt).toFixed(1) : null;
     const tgtLine = tgt > 0 && tgt <= ceiling * 1.05
-      ? `<line x1="${PL}" y1="${yp(tgt).toFixed(1)}" x2="${W - PR}" y2="${yp(tgt).toFixed(1)}"
-           stroke="${macro.color}" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/>`
+      ? `<line x1="${PL}" y1="${tgtY}" x2="${W - PR}" y2="${tgtY}"
+           stroke="${macro.color}" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.55"/>
+         <text x="${W - PR - 2}" y="${(parseFloat(tgtY) - 3).toFixed(1)}" text-anchor="end"
+           font-size="7.5" fill="${macro.color}" font-weight="700" opacity="0.85">${fmtY(tgt)}</text>`
       : "";
 
-    // Bars — today gets full opacity, other days slightly muted
+    // SVG hatch pattern for over-target bars
+    const patId = `hatch-${macro.key}`;
+    const hatchDef = `<defs>
+      <pattern id="${patId}" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45 0 0)">
+        <line x1="0" y1="0" x2="0" y2="5" stroke="rgba(255,255,255,0.4)" stroke-width="2"/>
+      </pattern>
+    </defs>`;
+
+    // Bars — today full opacity, others muted; over-target get crosshatch overlay + value label above
     const bars = vals.map((v, i) => {
       if (v === null) return "";
       const isToday = dates[i] === todayStr;
-      const barH    = Math.max(iH * (v / ceiling), 2).toFixed(1);
+      const isOver  = tgt > 0 && v > tgt;
+      const barH    = Math.max(iH * (Math.min(v, ceiling) / ceiling), 2).toFixed(1);
       const x       = (xCenter(i) - barW / 2).toFixed(1);
       const y       = (PT + iH - parseFloat(barH)).toFixed(1);
+      const dispVal = fmtY(v);
+      // value label sits above the bar; if bar is very tall push it just above top padding
+      const labelY  = Math.max(parseFloat(y) - 2, PT - 1).toFixed(1);
       return `<rect x="${x}" y="${y}" width="${barW.toFixed(1)}" height="${barH}"
-        rx="3" fill="${macro.color}" opacity="${isToday ? "1" : "0.7"}"/>`;
+          rx="3" fill="${macro.color}" opacity="${isToday ? "1" : "0.7"}"/>
+        ${isOver ? `<rect x="${x}" y="${y}" width="${barW.toFixed(1)}" height="${barH}"
+          rx="3" fill="url(#${patId})"/>` : ""}
+        <text x="${xCenter(i).toFixed(1)}" y="${labelY}" text-anchor="middle"
+          font-size="7" fill="${macro.color}" font-weight="700" opacity="${isToday ? "1" : "0.75"}">${dispVal}</text>`;
     }).join("");
 
     // X-axis labels — today in macro colour
@@ -1231,7 +1251,7 @@ function render7DayTable(container, dayRows) {
     return `<div class="card pg-chart">
       <div class="pg-chart-title" style="color:${macro.color}">${macro.label}</div>
       <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">
-        ${gridLines}${tgtLine}${bars}${xLabels}
+        ${hatchDef}${gridLines}${tgtLine}${bars}${xLabels}
       </svg>
     </div>`;
   }
@@ -1788,7 +1808,12 @@ function buildPrintView(mealPlan, recipes) {
         .map((_, di) => {
           const items = mealMap[di][mealType] || [];
           const content = items.length
-            ? items.map((it) => `<div class="cal-dish">${escapeHtml(it.name)}</div>`).join("")
+            ? items.map((it) => {
+                const macros = it.calories != null
+                  ? `<span class="cal-dish-macros">${Math.round(it.calories)} kcal · P ${round1(it.protein_g)}g · C ${round1(it.carbs_g)}g · F ${round1(it.fat_g)}g</span>`
+                  : "";
+                return `<div class="cal-dish">${escapeHtml(it.name)}${macros ? `<br>${macros}` : ""}</div>`;
+              }).join("")
             : `<span class="cal-empty">—</span>`;
           return `<td>${content}</td>`;
         })
@@ -1818,7 +1843,7 @@ function buildPrintView(mealPlan, recipes) {
     <div class="print-calendar-section">
       <div class="print-cal-header">
         <div class="print-cal-title">🍽️ ${days.length}-Day Indian Meal Plan · ${dietLabel}${proteinLabel}</div>
-        <div class="print-cal-meta">Target: ${Math.round(mealPlan.calorie_target)} kcal · ${Math.round(mealPlan.protein_target)}g protein/day</div>
+        <div class="print-cal-meta">Target: ${Math.round(mealPlan.calorie_target)} kcal · ${Math.round(mealPlan.protein_target)}g protein${currentTargets?.carbs_g ? ` · ${Math.round(currentTargets.carbs_g)}g carbs` : ""}${currentTargets?.fat_g ? ` · ${Math.round(currentTargets.fat_g)}g fat` : ""} / day</div>
       </div>
       ${mealPlan.summary ? `<p class="print-cal-summary">${escapeHtml(mealPlan.summary)}</p>` : ""}
       <table class="meal-calendar">

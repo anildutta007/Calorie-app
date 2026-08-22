@@ -1019,6 +1019,7 @@ input[type="time"]#edit-meal-time:focus {
     margin-bottom: 1.5pt;
   }
   .cal-empty { color: #ccc; }
+  .cal-dish-macros { font-size: 6.5pt; color: #777; display: inline; }
   /* Totals row */
   .cal-totals-row th { background: #f5f5f5 !important; }
   .cal-totals-cell   { font-size: 7pt; color: #333; line-height: 1.45; }
