@@ -1178,35 +1178,20 @@ async function loadHistory() {
     historyDateInput.value = today;
   }
   const date = historyDateInput.value;
-
-  // Load 7-day chart in parallel with the daily meal data
-  const chartContainer = document.getElementById("history-chart");
-  const totalsCard     = document.getElementById("history-totals-card");
-
-  const [progressRes, mealsRes] = await Promise.allSettled([
-    fetch("/api/progress?days=7", { headers: profileHeaders() }),
-    fetch(`/api/meals?date=${date}`, { headers: profileHeaders() }),
-  ]);
-
-  // Render 7-day bar chart
-  if (chartContainer) {
-    try {
-      const pRes = progressRes.value;
-      if (pRes && pRes.ok) {
-        const pData = await pRes.json();
-        render7DayTable(chartContainer, pData.days || []);
-      }
-    } catch (e) { /* silent */ }
-  }
-
-  // Render daily totals + meals
+  const totalsCard = document.getElementById("history-totals-card");
   try {
-    const mRes = mealsRes.value;
-    if (!mRes || mRes.status >= 500) throw new Error("Server error");
-    const data = await mRes.json();
+    const res = await fetch(`/api/meals?date=${date}`, { headers: profileHeaders() });
+    if (res.status >= 500) throw new Error(`Server error ${res.status}`);
+    const data = await res.json();
     hideDbBanner();
     if (totalsCard) totalsCard.style.display = "";
-    renderTotals(document.getElementById("history-totals"), data.total, document.getElementById("history-summary"));
+    // Show the same circular gauges as Today tab
+    renderCircularTotals(
+      document.getElementById("history-totals"),
+      data.meals,
+      data.total,
+      document.getElementById("history-summary")
+    );
     renderDayTimeline(document.getElementById("history-list"), data.meals, false, loadHistory, false);
   } catch (err) {
     showDbBanner(loadHistory);
@@ -2705,10 +2690,14 @@ async function loadProgress() {
   const container = document.getElementById("tab-progress");
   container.innerHTML = `<div class="empty-state">Loading your progress...</div>`;
   try {
-    const res = await fetch("/api/progress?days=7", { headers: profileHeaders() });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Failed to load progress.");
-    renderProgress(data.days || []);
+    const [progressRes, weightRes] = await Promise.all([
+      fetch("/api/progress?days=7",            { headers: profileHeaders() }),
+      fetch("/api/profile/weight?months=6",    { headers: profileHeaders() }),
+    ]);
+    const data       = await progressRes.json();
+    if (!progressRes.ok) throw new Error(data.error || "Failed to load progress.");
+    const weightData = weightRes.ok ? await weightRes.json() : { entries: [] };
+    renderProgress(data.days || [], weightData.entries || []);
   } catch (err) {
     document.getElementById("tab-progress").innerHTML = `<div class="flag over">⚠️ ${escapeHtml(err.message)}</div>`;
   }
@@ -2722,7 +2711,7 @@ function parseDateLocal(dateStr) {
   return new Date(y, m - 1, d);
 }
 
-function renderProgress(dayRows) {
+function renderProgress(dayRows, weightEntries = []) {
   const container = document.getElementById("tab-progress");
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
@@ -2785,6 +2774,18 @@ function renderProgress(dayRows) {
       </div>`
     : "";
 
+  // Weight line chart — only shown if at least 2 entries exist
+  const latestW = weightEntries.length ? weightEntries[weightEntries.length - 1] : null;
+  const weightHtml = weightEntries.length >= 2
+    ? `<div class="card">
+        <div class="weight-header">
+          <h2>⚖️ Weight — 6 Months</h2>
+          ${latestW ? `<div class="weight-latest">${latestW.weight_kg} kg <span class="muted">${new Date(latestW.logged_at).toLocaleDateString([], { month: "short", day: "numeric" })}</span></div>` : ""}
+        </div>
+        <div class="weight-chart-wrap">${weightChartSvg(weightEntries)}</div>
+      </div>`
+    : "";
+
   container.innerHTML = `
     <div class="card">
       <h2>📈 Last 7 Days</h2>
@@ -2799,6 +2800,7 @@ function renderProgress(dayRows) {
       </div>
     </div>
     ${nutrientsHtml}
+    ${weightHtml}
   `;
 
   // Populate the 7-day macro overview table immediately (data already in hand)
@@ -3130,15 +3132,7 @@ function renderWeightSection(container, entries) {
 
   container.innerHTML = `
     <div class="card">
-      <div class="weight-header">
-        <h2>⚖️ Weight — 6 Months</h2>
-        ${latestKg ? `<div class="weight-latest">${latestKg} <span class="muted">${latestDateLbl}</span></div>` : ""}
-      </div>
-      ${chartHtml}
-      ${listHtml}
-    </div>
-    <div class="card">
-      <h2>Log a Weigh-in</h2>
+      <h2>⚖️ Log a Weigh-in</h2>
       <div class="weight-log-grid">
         <div>
           <label for="wl-kg">Weight (kg)</label>
@@ -3157,7 +3151,8 @@ function renderWeightSection(container, entries) {
       <input type="text" id="wl-note" placeholder="e.g. after morning walk, fasted" maxlength="200" />
       <button id="wl-submit" class="primary-btn" type="button" style="margin-top:10px">Log Weight</button>
       <div id="wl-status" class="muted" style="margin-top:6px;min-height:1.2em"></div>
-    </div>`;
+    </div>
+    ${listHtml ? `<div class="card"><h2>Recent Weigh-ins</h2>${listHtml}</div>` : ""}`;
 
   // Wire log button
   document.getElementById("wl-submit")?.addEventListener("click", async () => {
