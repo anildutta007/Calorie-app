@@ -755,7 +755,7 @@ async function loadToday() {
     hideDbBanner();
     todayTotal = data.total; // keep a reference for the "complete my day" feature
     updateSuggestCard();
-    renderCircularTotals(document.getElementById("today-totals"), data.meals, data.total, document.getElementById("today-summary"));
+    renderTimezoneClock(document.getElementById("today-totals"), data.meals, data.total, document.getElementById("today-summary"));
     renderTodayExercise(document.getElementById("today-exercise"), todayExercise);
     renderDayTimeline(document.getElementById("today-list"), data.meals, true, loadToday, false);
     renderAllFlags(document.getElementById("today-flags"), data.meals);
@@ -1005,6 +1005,130 @@ function buildCircleSvg(macro, meals, total) {
   </svg>`;
 }
 
+// ── Timezone Clock ────────────────────────────────────────────────────────────
+// Replaces the 4-ring gauge. Shows a 24-hour radial clock divided into 5 time
+// zones, with a dot for each logged meal positioned at its eaten time.
+function renderTimezoneClock(container, meals, total, summaryEl) {
+  const cx = 150, cy = 150;
+  const OR = 105, IR = 58;   // outer / inner donut radii
+  const DR = 80;             // meal-dot radius
+  const LR = 66;             // zone-label radius (inside arc)
+  const TR = 120;            // hour-label radius (outside ring)
+
+  const ZONES = [
+    { name: "Early Morning", abbr: ["EARLY","MORN"], emoji: "🌙", start:  0, end:  6, fill: "#1e3060", dot: "#5b8fcf" },
+    { name: "Morning",       abbr: ["MORNING"],       emoji: "☀️", start:  6, end: 12, fill: "#78350f", dot: "#fbbf24" },
+    { name: "Afternoon",     abbr: ["AFTN"],          emoji: "🌤", start: 12, end: 15, fill: "#064e3b", dot: "#34d399" },
+    { name: "Evening",       abbr: ["EVE"],           emoji: "🌆", start: 15, end: 18, fill: "#7c2d12", dot: "#fb923c" },
+    { name: "Night",         abbr: ["NIGHT"],         emoji: "🌙", start: 18, end: 24, fill: "#1e1b4b", dot: "#a78bfa" },
+  ];
+
+  const hToA  = h => (h / 24) * 360;                           // hours → clock degrees (0 = top, CW)
+  const toRad = a => (a - 90) * Math.PI / 180;
+  const pt    = (r, a) => [+(cx + r * Math.cos(toRad(a))).toFixed(2), +(cy + r * Math.sin(toRad(a))).toFixed(2)];
+
+  function donutSector(r1, r2, h0, h1) {
+    const a0 = hToA(h0), a1 = hToA(h1);
+    const [ax, ay] = pt(r1, a0); const [bx, by] = pt(r1, a1);
+    const [cx2, cy2] = pt(r2, a1); const [dx, dy] = pt(r2, a0);
+    const lg = a1 - a0 > 180 ? 1 : 0;
+    return `M${ax},${ay} A${r1},${r1} 0 ${lg},1 ${bx},${by} L${cx2},${cy2} A${r2},${r2} 0 ${lg},0 ${dx},${dy}Z`;
+  }
+
+  // Group meals by zone
+  const zm = ZONES.map(() => ({ list: [], cal: 0, prot: 0, carbs: 0, fat: 0 }));
+  (meals || []).forEach(m => {
+    const d  = new Date(m.created_at);
+    const h  = d.getHours() + d.getMinutes() / 60;
+    const zi = ZONES.findIndex(z => h >= z.start && h < z.end);
+    if (zi < 0) return;
+    zm[zi].list.push({ ...m, h });
+    zm[zi].cal   += m.calories   || 0;
+    zm[zi].prot  += m.protein_g  || 0;
+    zm[zi].carbs += m.carbs_g    || 0;
+    zm[zi].fat   += m.fat_g      || 0;
+  });
+
+  // ── SVG ──────────────────────────────────────────────────
+  const s = [`<svg viewBox="-15 -15 330 330" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:290px;display:block;margin:0 auto;overflow:visible">`];
+
+  // 1. Colored donut sectors
+  ZONES.forEach(z => s.push(`<path d="${donutSector(OR, IR, z.start, z.end)}" fill="${z.fill}"/>`));
+
+  // 2. Zone boundary dividers + hour labels at segment edges
+  [[0,"00:00"],[6,"06:00"],[12,"12:00"],[15,"15:00"],[18,"18:00"]].forEach(([h, lbl]) => {
+    const a = hToA(h);
+    const [x1, y1] = pt(IR, a); const [x2, y2] = pt(OR + 5, a); const [lx, ly] = pt(TR, a);
+    s.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(255,255,255,0.45)" stroke-width="1.5"/>`);
+    s.push(`<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" font-size="8.5" fill="#888" font-family="inherit">${lbl}</text>`);
+  });
+
+  // 3. Zone abbreviation labels inside arcs
+  ZONES.forEach(z => {
+    const midA = hToA((z.start + z.end) / 2);
+    const big  = hToA(z.end) - hToA(z.start) >= 90;  // 90° sectors vs 45° sectors
+    const [ex, ey] = pt(LR, midA);
+    if (big) {
+      s.push(`<text x="${ex}" y="${ey - 6}" text-anchor="middle" dominant-baseline="middle" font-size="8" font-weight="700" letter-spacing="0.06em" fill="rgba(255,255,255,0.80)" font-family="inherit">${z.abbr[0]}</text>`);
+      if (z.abbr[1]) s.push(`<text x="${ex}" y="${ey + 7}" text-anchor="middle" dominant-baseline="middle" font-size="8" font-weight="700" letter-spacing="0.06em" fill="rgba(255,255,255,0.80)" font-family="inherit">${z.abbr[1]}</text>`);
+    } else {
+      s.push(`<text x="${ex}" y="${ey}" text-anchor="middle" dominant-baseline="middle" font-size="7.5" font-weight="700" letter-spacing="0.05em" fill="rgba(255,255,255,0.80)" font-family="inherit">${z.abbr[0]}</text>`);
+    }
+  });
+
+  // 4. Meal dots at their eaten time
+  (meals || []).forEach(m => {
+    const d  = new Date(m.created_at);
+    const h  = d.getHours() + d.getMinutes() / 60;
+    const zi = ZONES.findIndex(z => h >= z.start && h < z.end);
+    if (zi < 0) return;
+    const [mx, my] = pt(DR, hToA(h));
+    s.push(`<circle cx="${mx}" cy="${my}" r="5.5" fill="${ZONES[zi].dot}" stroke="white" stroke-width="1.5"/>`);
+  });
+
+  // 5. Centre circle + totals
+  const totalCal  = Math.round((total || {}).calories  || 0);
+  const totalProt = Math.round((total || {}).protein_g || 0);
+  s.push(`<circle cx="${cx}" cy="${cy}" r="${IR - 3}" fill="var(--card,#fff)"/>`);
+  s.push(`<text x="${cx}" y="${cy - 14}" text-anchor="middle" dominant-baseline="middle" font-size="24" font-weight="800" fill="var(--ink,#1f2323)" font-family="inherit">${totalCal}</text>`);
+  s.push(`<text x="${cx}" y="${cy + 4}" text-anchor="middle" dominant-baseline="middle" font-size="9.5" fill="var(--muted,#6b7280)" font-family="inherit">kcal today</text>`);
+  s.push(`<text x="${cx}" y="${cy + 18}" text-anchor="middle" dominant-baseline="middle" font-size="8.5" fill="var(--muted,#6b7280)" font-family="inherit">${totalProt}g protein</text>`);
+  s.push(`</svg>`);
+
+  // ── Zone breakdown ────────────────────────────────────────
+  let bd = `<div class="tz-breakdown">`;
+  ZONES.forEach((z, i) => {
+    const zd    = zm[i];
+    const range = `${String(z.start).padStart(2,"0")}:00–${String(z.end).padStart(2,"0")}:00`;
+    bd += `<div class="tz-zone">
+      <div class="tz-zone-hdr">
+        <span class="tz-dot" style="background:${z.dot}"></span>
+        <strong class="tz-zone-name">${z.emoji} ${z.name}</strong>
+        <span class="tz-range muted">${range}</span>
+        ${zd.cal > 0 ? `<strong class="tz-cal">${Math.round(zd.cal)} kcal</strong>` : ""}
+      </div>`;
+    if (zd.list.length) {
+      bd += `<div class="tz-macros muted">P ${Math.round(zd.prot)}g · C ${Math.round(zd.carbs)}g · F ${Math.round(zd.fat)}g</div>`;
+      zd.list.forEach(m => {
+        const t = new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        bd += `<div class="tz-meal-row"><span class="tz-t">${t}</span><span class="tz-desc">${escapeHtml(m.description || "")}</span><span class="tz-mcal muted">${Math.round(m.calories || 0)} kcal</span></div>`;
+      });
+    } else {
+      bd += `<div class="tz-macros muted tz-empty">No meals logged</div>`;
+    }
+    bd += `</div>`;
+  });
+  bd += `</div>`;
+
+  container.innerHTML = s.join("") + bd;
+
+  if (summaryEl) {
+    const line = daySummaryLine(total || {});
+    summaryEl.textContent = line;
+    summaryEl.style.display = line ? "block" : "none";
+  }
+}
+
 let mealsById = {}; // last-rendered meals, keyed by id, so Edit can look up full item data without refetching
 let todayTotal = null;    // {calories, protein_g, carbs_g, fat_g} — updated on every loadToday()
 let todayExercise = null; // exercise_log row for today from Apple Health, or null
@@ -1173,8 +1297,8 @@ async function loadHistory() {
     const data = await res.json();
     hideDbBanner();
     if (totalsCard) totalsCard.style.display = "";
-    // Show the same circular gauges as Today tab
-    renderCircularTotals(
+    // Show timezone clock for the selected date
+    renderTimezoneClock(
       document.getElementById("history-totals"),
       data.meals,
       data.total,
@@ -2981,12 +3105,13 @@ function renderActivitySection(container, historyEntries) {
       if (date === new Date().toISOString().slice(0, 10)) {
         todayExercise = d.entry;
         renderTodayExercise(document.getElementById("today-exercise"), todayExercise);
-        renderCircularTotals(
-          document.getElementById("today-totals"),
-          [],  // don't re-render meal arcs — just update summary line
-          todayTotal || {},
-          document.getElementById("today-summary")
-        );
+        // Just refresh the summary line — don't overwrite the clock
+        const _summEl = document.getElementById("today-summary");
+        if (_summEl) {
+          const _line = daySummaryLine(todayTotal || {});
+          _summEl.textContent = _line;
+          _summEl.style.display = _line ? "block" : "none";
+        }
       }
     } catch (err) {
       statusEl.textContent = err.message;
