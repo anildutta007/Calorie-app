@@ -260,27 +260,71 @@ switchProfileBtn.addEventListener("click", () => {
 });
 
 // --- Tab switching ---
-const tabButtons = document.querySelectorAll(".tab-btn");
 const tabs = document.querySelectorAll(".tab");
+const bottomTabBtns = document.querySelectorAll(".bottom-tab-btn[data-tab]");
+const moreNavBtn = document.getElementById("more-nav-btn");
+const moreOverlay = document.getElementById("more-overlay");
+const moreDrawer  = document.getElementById("more-drawer");
+const moreDrawerItems = document.querySelectorAll(".more-drawer-item[data-tab]");
 
-tabButtons.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    tabButtons.forEach((b) => b.classList.remove("active"));
-    tabs.forEach((t) => t.classList.remove("active"));
-    btn.classList.add("active");
-    document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
-    if (btn.dataset.tab === "log") resetLogTimes();
-    if (btn.dataset.tab === "today") loadToday();
-    if (btn.dataset.tab === "history") loadHistory();
-    if (btn.dataset.tab === "plan") loadMealPlan();
-    if (btn.dataset.tab === "progress") loadProgress();
-    if (btn.dataset.tab === "health") loadHealthTab();
-    if (btn.dataset.tab === "goal") {
-      loadTargets(); // refresh target display at top of merged tab
-      loadWeightGoal();
-      loadHealthSyncCard();
-    }
+function activateTab(name) {
+  tabs.forEach((t) => t.classList.remove("active"));
+  const section = document.getElementById(`tab-${name}`);
+  if (section) section.classList.add("active");
+  // Update bottom-nav active state
+  bottomTabBtns.forEach((b) => b.classList.remove("active"));
+  const matchBtn = document.querySelector(`.bottom-tab-btn[data-tab="${name}"]`);
+  if (matchBtn) matchBtn.classList.add("active");
+  // Deactivate More button unless we're still on log (home)
+  if (!matchBtn && name !== "log") {
+    moreNavBtn.classList.add("active");
+  } else {
+    moreNavBtn.classList.remove("active");
+  }
+}
+
+function openMoreDrawer() {
+  moreOverlay.classList.add("open");
+  moreDrawer.classList.add("open");
+  moreNavBtn.classList.add("active");
+  bottomTabBtns.forEach((b) => b.classList.remove("active"));
+}
+
+function closeMoreDrawer() {
+  moreOverlay.classList.remove("open");
+  moreDrawer.classList.remove("open");
+}
+
+moreNavBtn.addEventListener("click", openMoreDrawer);
+moreOverlay.addEventListener("click", closeMoreDrawer);
+
+moreDrawerItems.forEach((item) => {
+  item.addEventListener("click", () => {
+    const name = item.dataset.tab;
+    closeMoreDrawer();
+    activateTab(name);
+    if (name === "progress") loadProgress();
+    if (name === "health") loadHealthTab();
+    if (name === "goal") { loadTargets(); loadWeightGoal(); loadHealthSyncCard(); }
   });
+});
+
+bottomTabBtns.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const name = btn.dataset.tab;
+    activateTab(name);
+    closeMoreDrawer();
+    if (name === "today")   loadToday();
+    if (name === "history") loadHistory();
+    if (name === "plan")    loadMealPlan();
+  });
+});
+
+// Logo tap → go home (Log Meal)
+document.querySelector("#app-main .app-logo").addEventListener("click", () => {
+  activateTab("log");
+  resetLogTimes();
+  closeMoreDrawer();
 });
 
 // --- Voice input (Web Speech API) ---
@@ -366,47 +410,19 @@ function mealTimeIso(inputEl) {
   return d.toISOString();
 }
 
-const logMealTimeInput   = document.getElementById("log-meal-time");
-const photoMealTimeInput = document.getElementById("photo-meal-time");
-const editMealTimeInput  = document.getElementById("edit-meal-time");
+const logMealTimeInput  = document.getElementById("log-meal-time");
+const editMealTimeInput = document.getElementById("edit-meal-time");
 
-// Initialise both log-tab time inputs to "now"
+// Initialise log time input to "now"
 function resetLogTimes() {
   const t = nowTimeStr();
-  if (logMealTimeInput)   logMealTimeInput.value   = t;
-  if (photoMealTimeInput) photoMealTimeInput.value = t;
+  if (logMealTimeInput) logMealTimeInput.value = t;
 }
 
-// --- Text analysis ---
-const analyzeTextBtn = document.getElementById("analyze-text-btn");
-analyzeTextBtn.addEventListener("click", async () => {
-  const text = voiceText.value.trim();
-  if (!text) return;
-  setBusy(analyzeTextBtn, true, "Analyzing...");
-  try {
-    const res = await fetch("/api/meals/text", {
-      method: "POST",
-      headers: profileHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ text, meal_time_iso: mealTimeIso(logMealTimeInput) }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Failed to analyze.");
-    showResult(data);
-    voiceText.value = "";
-    resetLogTimes();
-  } catch (err) {
-    showError(err.message);
-  } finally {
-    setBusy(analyzeTextBtn, false, "Analyze & Log");
-  }
-});
-
-// --- Photo analysis ---
-const photoInput = document.getElementById("photo-input");
+// --- Photo input (shared) ---
+const photoInput   = document.getElementById("photo-input");
 const photoPreview = document.getElementById("photo-preview");
-const analyzePhotoBtn = document.getElementById("analyze-photo-btn");
-const photoCaption = document.getElementById("photo-caption");
-let selectedFile = null;
+let selectedFile   = null;
 
 photoInput.addEventListener("change", () => {
   const file = photoInput.files[0];
@@ -414,7 +430,6 @@ photoInput.addEventListener("change", () => {
   selectedFile = file;
   photoPreview.src = URL.createObjectURL(file);
   photoPreview.style.display = "block";
-  analyzePhotoBtn.disabled = false;
 });
 
 // Phone camera photos are often 3-10MB (and sometimes HEIC on iPhone), which
@@ -442,30 +457,54 @@ async function resizeImageForUpload(file, maxDim = 1600, quality = 0.85) {
   }
 }
 
-analyzePhotoBtn.addEventListener("click", async () => {
-  if (!selectedFile) return;
-  setBusy(analyzePhotoBtn, true, "Preparing photo...");
-  try {
-    const uploadFile = await resizeImageForUpload(selectedFile);
-    setBusy(analyzePhotoBtn, true, "Analyzing...");
-    const formData = new FormData();
-    formData.append("photo", uploadFile, "photo.jpg");
-    formData.append("caption", photoCaption.value.trim());
-    formData.append("meal_time_iso", mealTimeIso(photoMealTimeInput));
-    const res = await fetch("/api/meals/photo", { method: "POST", headers: profileHeaders(), body: formData });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Failed to analyze.");
-    showResult(data);
-    photoInput.value = "";
-    photoCaption.value = "";
-    photoPreview.style.display = "none";
-    selectedFile = null;
-    analyzePhotoBtn.disabled = true;
-    resetLogTimes();
-  } catch (err) {
-    showError(err.message || "Upload failed - try a smaller photo or check your connection.");
-  } finally {
-    setBusy(analyzePhotoBtn, false, "Analyze & Log");
+// --- Unified Analyze & Log button ---
+const analyzeBtn = document.getElementById("analyze-btn");
+analyzeBtn.addEventListener("click", async () => {
+  if (selectedFile) {
+    // Photo path — any text in the textarea becomes a caption/note
+    setBusy(analyzeBtn, true, "Preparing photo...");
+    try {
+      const uploadFile = await resizeImageForUpload(selectedFile);
+      setBusy(analyzeBtn, true, "Analyzing...");
+      const formData = new FormData();
+      formData.append("photo", uploadFile, "photo.jpg");
+      formData.append("caption", voiceText.value.trim());
+      formData.append("meal_time_iso", mealTimeIso(logMealTimeInput));
+      const res = await fetch("/api/meals/photo", { method: "POST", headers: profileHeaders(), body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to analyze.");
+      showResult(data);
+      photoInput.value = "";
+      voiceText.value = "";
+      photoPreview.style.display = "none";
+      selectedFile = null;
+      resetLogTimes();
+    } catch (err) {
+      showError(err.message || "Upload failed — try a smaller photo or check your connection.");
+    } finally {
+      setBusy(analyzeBtn, false, "Analyze & Log");
+    }
+  } else {
+    // Text path
+    const text = voiceText.value.trim();
+    if (!text) return;
+    setBusy(analyzeBtn, true, "Analyzing...");
+    try {
+      const res = await fetch("/api/meals/text", {
+        method: "POST",
+        headers: profileHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ text, meal_time_iso: mealTimeIso(logMealTimeInput) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to analyze.");
+      showResult(data);
+      voiceText.value = "";
+      resetLogTimes();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setBusy(analyzeBtn, false, "Analyze & Log");
+    }
   }
 });
 
@@ -2569,8 +2608,7 @@ function renderWeightGoalResult(container, data) {
   if (mealPlanBtn && data.loss_targets) {
     mealPlanBtn.addEventListener("click", () => {
       // Switch to Meal Plan tab and pre-fill with loss targets
-      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === "plan"));
-      document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.id === "tab-plan"));
+      activateTab("plan");
       planCaloriesInput.value = Math.round(data.loss_targets.calories);
       planProteinInput.value  = Math.round(data.loss_targets.protein_g);
       planTargetHint.textContent = "Pre-filled with your weight-loss targets — generate your plan below.";

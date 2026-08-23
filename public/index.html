@@ -75,44 +75,26 @@
         <span id="current-profile-name" class="profile-pill"></span>
         <button id="switch-profile-btn" class="link-btn">Switch profile</button>
       </div>
-      <nav>
-        <button class="tab-btn active" data-tab="log">📝 Log Meal</button>
-        <button class="tab-btn" data-tab="today">📅 Today</button>
-        <button class="tab-btn" data-tab="history">📊 History</button>
-        <button class="tab-btn" data-tab="plan">🥗 Meal Plan</button>
-        <button class="tab-btn" data-tab="progress">📈 Progress</button>
-        <button class="tab-btn" data-tab="health">❤️ Health</button>
-        <button class="tab-btn" data-tab="goal">🎯 Goals</button>
-      </nav>
     </header>
 
     <!-- LOG TAB -->
     <section id="tab-log" class="tab active">
       <div id="daily-greeting" class="greeting-strip" style="display:none"></div>
       <div class="card">
-        <h2>Speak what you ate</h2>
-        <div class="voice-row">
-          <button id="mic-btn" class="mic-btn">🎤 Start speaking</button>
-          <span id="mic-status" class="muted"></span>
+        <h2>What did you eat?</h2>
+        <div class="log-action-row">
+          <button id="mic-btn" class="log-action-btn">🎤 Speak</button>
+          <label for="photo-input" class="log-action-btn">📷 Snap</label>
+          <input id="photo-input" type="file" accept="image/*" capture="environment" style="display:none" />
         </div>
-        <textarea id="voice-text" placeholder="Your spoken description will appear here — or just type what you ate."></textarea>
+        <span id="mic-status" class="muted" style="display:block;min-height:1.1em;margin-bottom:4px;font-size:0.82rem"></span>
+        <textarea id="voice-text" placeholder="Describe what you ate — or use Speak / Snap above. Add any notes here too."></textarea>
+        <img id="photo-preview" class="photo-preview" style="display:none" />
         <div class="meal-time-row">
           <label for="log-meal-time">🕐 Time eaten</label>
           <input type="time" id="log-meal-time" />
         </div>
-        <button id="analyze-text-btn" class="primary-btn">Analyze &amp; Log</button>
-      </div>
-
-      <div class="card">
-        <h2>Or snap your plate</h2>
-        <input id="photo-input" type="file" accept="image/*" capture="environment" />
-        <img id="photo-preview" class="photo-preview" style="display:none" />
-        <input id="photo-caption" type="text" placeholder="Optional note (e.g. 'no dressing on the salad')" />
-        <div class="meal-time-row">
-          <label for="photo-meal-time">🕐 Time eaten</label>
-          <input type="time" id="photo-meal-time" />
-        </div>
-        <button id="analyze-photo-btn" class="primary-btn" disabled>Analyze &amp; Log</button>
+        <button id="analyze-btn" class="primary-btn">Analyze &amp; Log</button>
       </div>
 
       <div id="result-card" class="card result-card" style="display:none"></div>
@@ -220,8 +202,47 @@
       <div class="empty-state">Tap the Health tab to load your data.</div>
     </section>
 
+    <!-- BOTTOM NAV -->
+    <nav class="bottom-nav">
+      <button class="bottom-tab-btn" data-tab="today">
+        <span class="bottom-tab-icon">📅</span>
+        <span class="bottom-tab-label">Today</span>
+      </button>
+      <button class="bottom-tab-btn" data-tab="history">
+        <span class="bottom-tab-icon">📊</span>
+        <span class="bottom-tab-label">History</span>
+      </button>
+      <button class="bottom-tab-btn" data-tab="plan">
+        <span class="bottom-tab-icon">🥗</span>
+        <span class="bottom-tab-label">Plan</span>
+      </button>
+      <button class="bottom-tab-btn" id="more-nav-btn">
+        <span class="bottom-tab-icon more-dots">•••</span>
+        <span class="bottom-tab-label">More</span>
+      </button>
+    </nav>
+
+    <!-- MORE DRAWER -->
+    <div class="more-overlay" id="more-overlay"></div>
+    <div class="more-drawer" id="more-drawer">
+      <div class="more-drawer-handle"></div>
+      <div class="more-drawer-title">More</div>
+      <button class="more-drawer-item" data-tab="progress">
+        <span class="more-drawer-icon">📈</span>
+        <div><div class="more-drawer-label">Progress</div><div class="more-drawer-sub">7-day charts &amp; AI summary</div></div>
+      </button>
+      <button class="more-drawer-item" data-tab="health">
+        <span class="more-drawer-icon">❤️</span>
+        <div><div class="more-drawer-label">Health</div><div class="more-drawer-sub">Weight chart &amp; daily activity</div></div>
+      </button>
+      <button class="more-drawer-item" data-tab="goal">
+        <span class="more-drawer-icon">🎯</span>
+        <div><div class="more-drawer-label">Goals</div><div class="more-drawer-sub">Targets, BMI &amp; Apple Health sync</div></div>
+      </button>
+    </div>
+
     <!-- GOALS TAB (merged Target + Goal) -->
-    <section id="tab-goal" class="tab">
+    <section id="tab-goal" class="tab" data-tab="goal">
       <!-- Static: current daily target + manual edit form -->
       <div class="card">
         <div class="target-header">
