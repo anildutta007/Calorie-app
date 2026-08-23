@@ -276,6 +276,8 @@ function activateTab(name) {
   const bottomBtn = document.querySelector(`.bottom-tab-btn[data-tab="${name}"]`);
   if (topBtn)    topBtn.classList.add("active");
   if (bottomBtn) bottomBtn.classList.add("active");
+  // Always start at the top of the new tab
+  window.scrollTo({ top: 0, behavior: "instant" });
 }
 
 topTabBtns.forEach((btn) => {
@@ -1171,19 +1173,41 @@ const historyDateInput = document.getElementById("history-date");
 historyDateInput.addEventListener("change", loadHistory);
 
 async function loadHistory() {
+  const today = new Date().toISOString().slice(0, 10);
   if (!historyDateInput.value) {
-    historyDateInput.value = new Date().toISOString().slice(0, 10);
+    historyDateInput.value = today;
   }
   const date = historyDateInput.value;
-  const today = new Date().toISOString().slice(0, 10);
+
+  // Load 7-day chart in parallel with the daily meal data
+  const chartContainer = document.getElementById("history-chart");
+  const totalsCard     = document.getElementById("history-totals-card");
+
+  const [progressRes, mealsRes] = await Promise.allSettled([
+    fetch("/api/progress?days=7", { headers: profileHeaders() }),
+    fetch(`/api/meals?date=${date}`, { headers: profileHeaders() }),
+  ]);
+
+  // Render 7-day bar chart
+  if (chartContainer) {
+    try {
+      const pRes = progressRes.value;
+      if (pRes && pRes.ok) {
+        const pData = await pRes.json();
+        render7DayTable(chartContainer, pData.days || []);
+      }
+    } catch (e) { /* silent */ }
+  }
+
+  // Render daily totals + meals
   try {
-    const res = await fetch(`/api/meals?date=${date}`, { headers: profileHeaders() });
-    if (res.status >= 500) throw new Error(`Server error ${res.status}`);
-    const data = await res.json();
+    const mRes = mealsRes.value;
+    if (!mRes || mRes.status >= 500) throw new Error("Server error");
+    const data = await mRes.json();
     hideDbBanner();
+    if (totalsCard) totalsCard.style.display = "";
     renderTotals(document.getElementById("history-totals"), data.total, document.getElementById("history-summary"));
-    // Scroll to current hour only when viewing today's date
-    renderDayTimeline(document.getElementById("history-list"), data.meals, false, loadHistory, date === today);
+    renderDayTimeline(document.getElementById("history-list"), data.meals, false, loadHistory, false);
   } catch (err) {
     showDbBanner(loadHistory);
   }

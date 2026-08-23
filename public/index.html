@@ -135,10 +135,14 @@
     <!-- HISTORY TAB -->
     <section id="tab-history" class="tab">
       <div class="card">
-        <label for="history-date">Pick a date</label>
+        <h2>📈 Last 7 Days</h2>
+        <div id="history-chart"></div>
+      </div>
+      <div class="card" style="margin-top:0">
+        <label for="history-date">Pick a date to see meals</label>
         <input type="date" id="history-date" />
       </div>
-      <div class="card totals-card">
+      <div class="card totals-card" id="history-totals-card" style="display:none">
         <h2>Totals</h2>
         <div id="history-totals"></div>
         <div id="history-summary" class="day-summary"></div>
@@ -209,16 +213,8 @@
       <div class="empty-state">Tap the Health tab to load your data.</div>
     </section>
 
-    <!-- BOTTOM NAV (History · Plan · Progress · Goals) -->
+    <!-- BOTTOM NAV (Progress · Goals · History · Meal Plan) -->
     <nav class="bottom-nav">
-      <button class="bottom-tab-btn" data-tab="history">
-        <span class="bottom-tab-icon">📊</span>
-        <span class="bottom-tab-label">History</span>
-      </button>
-      <button class="bottom-tab-btn" data-tab="plan">
-        <span class="bottom-tab-icon">🥗</span>
-        <span class="bottom-tab-label">Plan</span>
-      </button>
       <button class="bottom-tab-btn" data-tab="progress">
         <span class="bottom-tab-icon">📈</span>
         <span class="bottom-tab-label">Progress</span>
@@ -226,6 +222,14 @@
       <button class="bottom-tab-btn" data-tab="goal">
         <span class="bottom-tab-icon">🎯</span>
         <span class="bottom-tab-label">Goals</span>
+      </button>
+      <button class="bottom-tab-btn" data-tab="history">
+        <span class="bottom-tab-icon">📊</span>
+        <span class="bottom-tab-label">History</span>
+      </button>
+      <button class="bottom-tab-btn" data-tab="plan">
+        <span class="bottom-tab-icon">🥗</span>
+        <span class="bottom-tab-label">Meal Plan</span>
       </button>
     </nav>
 
