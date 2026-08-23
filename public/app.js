@@ -755,10 +755,8 @@ async function loadToday() {
     hideDbBanner();
     todayTotal = data.total; // keep a reference for the "complete my day" feature
     updateSuggestCard();
-    renderCircularTotals(document.getElementById("today-macro-circles"), data.meals, data.total, null);
-    renderTimezoneClock(document.getElementById("today-totals"), data.meals, data.total, document.getElementById("today-summary"));
     renderTodayExercise(document.getElementById("today-exercise"), todayExercise);
-    renderZoneTimeline(document.getElementById("today-list"), data.meals, true, loadToday);
+    renderZonePanels(document.getElementById("today-list"), data.meals, data.total, true, loadToday);
     renderAllFlags(document.getElementById("today-flags"), data.meals);
   } catch (err) {
     showDbBanner(loadToday);
@@ -1372,32 +1370,153 @@ function renderZoneTimeline(container, meals, showEdit, onDelete) {
   });
 }
 
+// ── Zone Panels ───────────────────────────────────────────────────────────────
+// Main view for Today + History: 5 time-period sections, each showing
+// 4 macro progress rings (for that period's intake) + individual meal cards.
+// A "Day Total" section with 4 rings for the full day appears at the bottom.
+// Portion warnings are rendered separately AFTER this, at end of page.
+function renderZonePanels(container, meals, total, showEdit, onDelete) {
+  meals.forEach(m => (mealsById[m.id] = m));
+
+  const ZONES = [
+    { name: "Early Morning", emoji: "🌙", start:  0, end:  6, dot: "#5b8fcf", bg: "rgba(91,143,207,0.08)" },
+    { name: "Morning",       emoji: "☀️", start:  6, end: 12, dot: "#d97706", bg: "rgba(217,119,6,0.08)"  },
+    { name: "Afternoon",     emoji: "🌤", start: 12, end: 15, dot: "#059669", bg: "rgba(5,150,105,0.08)"  },
+    { name: "Evening",       emoji: "🌆", start: 15, end: 18, dot: "#ea580c", bg: "rgba(234,88,12,0.08)"  },
+    { name: "Night",         emoji: "🌙", start: 18, end: 24, dot: "#7c3aed", bg: "rgba(124,58,237,0.08)" },
+  ];
+
+  const MACROS = [
+    { key: "calories",  label: "CALORIES", unit: "kcal", target: currentTargets?.calories,  color: "#2f6f4f", excessColor: "#dc2626" },
+    { key: "protein_g", label: "PROTEIN",  unit: "g",    target: currentTargets?.protein_g, color: "#1d4ed8", excessColor: "#dc2626" },
+    { key: "carbs_g",   label: "CARBS",    unit: "g",    target: currentTargets?.carbs_g,   color: "#b45309", excessColor: "#dc2626" },
+    { key: "fat_g",     label: "FAT",      unit: "g",    target: currentTargets?.fat_g,     color: "#6d28d9", excessColor: "#dc2626" },
+  ];
+
+  // Group meals by zone
+  const byZone = ZONES.map(() => ({ meals: [], calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }));
+  meals.forEach(m => {
+    const d  = new Date(m.created_at);
+    const h  = d.getHours() + d.getMinutes() / 60;
+    const zi = ZONES.findIndex(z => h >= z.start && h < z.end);
+    if (zi >= 0) {
+      byZone[zi].meals.push(m);
+      byZone[zi].calories  += m.calories   || 0;
+      byZone[zi].protein_g += m.protein_g  || 0;
+      byZone[zi].carbs_g   += m.carbs_g    || 0;
+      byZone[zi].fat_g     += m.fat_g      || 0;
+    }
+  });
+
+  let html = `<div class="zone-panels">`;
+
+  // ── 5 zone sections ──
+  ZONES.forEach((z, i) => {
+    const zm   = byZone[i];
+    const hasM = zm.meals.length > 0;
+    const range = `${String(z.start).padStart(2,"0")}:00–${String(z.end).padStart(2,"0")}:00`;
+
+    html += `<div class="zp-section" style="--zp-dot:${z.dot};--zp-bg:${z.bg}">
+      <div class="zp-header">
+        <span class="zp-dot-badge"></span>
+        <span class="zp-zone-name">${z.emoji} ${z.name}</span>
+        <span class="zp-range muted">${range}</span>
+        ${hasM ? `<span class="zp-kcal">${Math.round(zm.calories)} kcal</span>` : ""}
+      </div>`;
+
+    if (hasM) {
+      // 4 macro rings for this zone's intake vs daily target
+      html += `<div class="circ-grid zp-rings">`;
+      MACROS.forEach(mac => {
+        html += `<div class="circ-cell">${buildCircleSvg(mac, zm.meals, zm)}</div>`;
+      });
+      html += `</div>`;
+
+      // Individual meal cards
+      zm.meals.forEach(m => {
+        const t = new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        html += `<div class="tl-card">
+          <div class="tl-card-header">
+            <div class="tl-card-title">${escapeHtml(m.description)}</div>
+            <div class="tl-card-actions">
+              <button class="detail-btn" data-id="${m.id}" title="Show food details">D</button>
+              ${showEdit ? `<button class="edit-btn" data-id="${m.id}">Edit</button>` : ""}
+              <button class="delete-btn" data-id="${m.id}">Delete</button>
+            </div>
+          </div>
+          <div class="tl-card-time">${t} · ${m.source || ""}</div>
+          <div class="tl-detail" hidden>${renderItemsCompact(m.items)}</div>
+          <div class="tl-macros">
+            <div class="tl-chip"><b>${Math.round(m.calories || 0)}</b> kcal</div>
+            <div class="tl-chip">P <b>${round1(m.protein_g)}g</b></div>
+            <div class="tl-chip">C <b>${round1(m.carbs_g)}g</b></div>
+            <div class="tl-chip">F <b>${round1(m.fat_g)}g</b></div>
+          </div>
+        </div>`;
+      });
+    } else {
+      html += `<div class="zp-no-meals muted">No meals logged</div>`;
+    }
+
+    html += `</div>`; // .zp-section
+  });
+
+  // ── Day Total section ──
+  const dayTotal = total || {};
+  const summLine = daySummaryLine(dayTotal);
+  html += `<div class="zp-section zp-day-total">
+    <div class="zp-header">
+      <span class="zp-dot-badge" style="--zp-dot:#2f6f4f"></span>
+      <span class="zp-zone-name">📊 Day Total</span>
+      <span id="today-summary" class="day-summary" style="display:${summLine ? "block" : "none"};flex:1;text-align:right;font-size:0.78rem;margin-left:auto">${summLine || ""}</span>
+    </div>
+    <div class="circ-grid zp-rings">`;
+  MACROS.forEach(mac => {
+    html += `<div class="circ-cell">${buildCircleSvg(mac, meals, dayTotal)}</div>`;
+  });
+  html += `</div></div>`;
+
+  html += `</div>`; // .zone-panels
+  container.innerHTML = html;
+
+  // ── Wire up buttons ──
+  container.querySelectorAll(".detail-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const card   = btn.closest(".tl-card");
+      const detail = card.querySelector(".tl-detail");
+      const open   = !detail.hidden;
+      detail.hidden = open;
+      btn.classList.toggle("detail-btn-on", !open);
+      btn.title = open ? "Show food details" : "Hide food details";
+    });
+  });
+  container.querySelectorAll(".delete-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Delete this meal?")) return;
+      await fetch(`/api/meals/${btn.dataset.id}`, { method: "DELETE", headers: profileHeaders() });
+      if (onDelete) onDelete();
+    });
+  });
+  container.querySelectorAll(".edit-btn").forEach(btn => {
+    btn.addEventListener("click", () => openEditMealModal(mealsById[btn.dataset.id]));
+  });
+}
+
 // --- History tab ---
 const historyDateInput = document.getElementById("history-date");
 historyDateInput.addEventListener("change", loadHistory);
 
 async function loadHistory() {
   const today = new Date().toISOString().slice(0, 10);
-  if (!historyDateInput.value) {
-    historyDateInput.value = today;
-  }
+  if (!historyDateInput.value) historyDateInput.value = today;
   const date = historyDateInput.value;
-  const totalsCard = document.getElementById("history-totals-card");
   try {
     const res = await fetch(`/api/meals?date=${date}`, { headers: profileHeaders() });
     if (res.status >= 500) throw new Error(`Server error ${res.status}`);
     const data = await res.json();
     hideDbBanner();
-    if (totalsCard) totalsCard.style.display = "";
-    // Show 4-ring macro circles + timezone clock for the selected date
-    renderCircularTotals(document.getElementById("history-macro-circles"), data.meals, data.total, null);
-    renderTimezoneClock(
-      document.getElementById("history-totals"),
-      data.meals,
-      data.total,
-      document.getElementById("history-summary")
-    );
-    renderZoneTimeline(document.getElementById("history-list"), data.meals, false, loadHistory);
+    renderZonePanels(document.getElementById("history-list"), data.meals, data.total, false, loadHistory);
+    renderAllFlags(document.getElementById("history-flags"), data.meals);
   } catch (err) {
     showDbBanner(loadHistory);
   }
@@ -3198,8 +3317,7 @@ function renderActivitySection(container, historyEntries) {
       if (date === new Date().toISOString().slice(0, 10)) {
         todayExercise = d.entry;
         renderTodayExercise(document.getElementById("today-exercise"), todayExercise);
-        // Refresh macro circles with updated exercise-adjusted total; don't overwrite the clock
-        renderCircularTotals(document.getElementById("today-macro-circles"), [], todayTotal || {}, null);
+        // Refresh the day-total summary line (zone panels already rendered)
         const _summEl = document.getElementById("today-summary");
         if (_summEl) {
           const _line = daySummaryLine(todayTotal || {});

@@ -112,15 +112,12 @@
 
     <!-- TODAY TAB -->
     <section id="tab-today" class="tab">
-      <div class="card totals-card">
-        <h2>Today's intake</h2>
-        <div id="today-macro-circles"></div>
-        <div id="today-totals"></div>
-        <div id="today-exercise"></div>
-        <div id="today-summary" class="day-summary"></div>
-      </div>
+      <!-- Exercise summary (Apple Health steps / active calories) -->
+      <div id="today-exercise"></div>
+      <!-- Zone panels: 5 time periods each with 4 macro rings + meal cards + day total (rendered by JS) -->
+      <div id="today-list"></div>
+      <!-- Portion warnings at end of page -->
       <div id="today-flags"></div>
-
       <!-- Complete My Day — suggest meals for remaining targets (shown only when a daily target is set) -->
       <div class="card suggest-trigger-card" id="suggest-trigger-card" style="display:none">
         <h2>Complete My Day 🍽️</h2>
@@ -132,8 +129,6 @@
         <button id="suggest-meals-btn" class="primary-btn" style="margin-top:12px">🍽️ Suggest Meals for Rest of Day</button>
         <div id="suggest-status" class="muted" style="margin-top:8px"></div>
       </div>
-
-      <div id="today-list" class="meal-list"></div>
     </section>
 
     <!-- HISTORY TAB -->
@@ -142,12 +137,10 @@
         <label for="history-date">Pick a date</label>
         <input type="date" id="history-date" />
       </div>
-      <div class="card totals-card" id="history-totals-card" style="display:none">
-        <div id="history-macro-circles"></div>
-        <div id="history-totals"></div>
-        <div id="history-summary" class="day-summary"></div>
-      </div>
+      <!-- Zone panels rendered here when a date is selected -->
       <div id="history-list" class="meal-list"></div>
+      <!-- Portion warnings at end of page -->
+      <div id="history-flags"></div>
     </section>
 
     <!-- MEAL PLAN TAB -->

@@ -1403,6 +1403,65 @@ input[type="time"]#edit-meal-time:focus {
   flex-shrink: 0;
 }
 
+/* ── Zone Panels (Today + History tabs) ───────────────────────────────── */
+.zone-panels { display: flex; flex-direction: column; gap: 0; }
+
+.zp-section {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 14px 14px 10px;
+  margin-bottom: 10px;
+  border-left: 4px solid var(--zp-dot, var(--accent));
+  background-color: color-mix(in srgb, var(--card) 92%, var(--bg));
+}
+
+.zp-day-total {
+  border-left-color: var(--accent);
+}
+
+.zp-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.zp-dot-badge {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--zp-dot, var(--accent));
+  flex-shrink: 0;
+}
+
+.zp-zone-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.zp-range {
+  font-size: 0.73rem;
+}
+
+.zp-kcal {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--zp-dot, var(--accent));
+}
+
+.zp-rings {
+  margin-bottom: 10px;
+}
+
+.zp-no-meals {
+  font-size: 0.8rem;
+  padding: 4px 0 4px 14px;
+  opacity: 0.5;
+}
+
 /* ── Zone Timeline (Today + History tabs) ─────────────────────────────── */
 .zone-timeline {
   display: flex;
