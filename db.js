@@ -530,7 +530,7 @@ async function upsertExercise(profileId, date, data) {
       ${profileId}, ${date},
       ${data.steps || 0}, ${data.active_calories || 0},
       ${data.resting_calories || 0}, ${data.exercise_minutes || 0},
-      ${"apple_health"}, ${new Date().toISOString()}
+      ${data.source || "apple_health"}, ${new Date().toISOString()}
     )
     ON CONFLICT (profile_id, date) DO UPDATE SET
       steps            = EXCLUDED.steps,
@@ -549,6 +549,20 @@ async function getExerciseByDate(profileId, date) {
     SELECT * FROM exercise_log WHERE profile_id = ${profileId} AND date = ${date}
   `;
   return rows[0] || null;
+}
+
+// Returns the last N days of exercise rows, newest first.
+async function getExerciseRecent(profileId, days) {
+  await init();
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - (days - 1));
+  const cutoffDate = cutoff.toISOString().slice(0, 10);
+  const rows = await sql`
+    SELECT * FROM exercise_log
+    WHERE profile_id = ${profileId} AND date >= ${cutoffDate}
+    ORDER BY date DESC
+  `;
+  return rows;
 }
 
 module.exports = {
@@ -579,4 +593,5 @@ module.exports = {
   getProfileByHealthToken,
   upsertExercise,
   getExerciseByDate,
+  getExerciseRecent,
 };

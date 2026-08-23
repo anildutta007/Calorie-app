@@ -2226,3 +2226,47 @@ input[type="time"]#edit-meal-time:focus {
   opacity: 1;
   background: var(--over-bg);
 }
+
+/* ── Activity section ────────────────────────────────────────────────────── */
+.act-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+@media (max-width: 380px) {
+  .act-grid { grid-template-columns: 1fr; }
+}
+
+.act-history {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.act-history-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.act-history-row:last-child { border-bottom: none; }
+
+.act-history-date {
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.act-history-data {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: right;
+}

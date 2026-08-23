@@ -31,6 +31,7 @@ const {
   getProfileByHealthToken,
   upsertExercise,
   getExerciseByDate,
+  getExerciseRecent,
 } = require("./db");
 const { analyzeMealText, analyzeMealPhoto, estimateItemMacros, generateDailyQuote, generateProgressSummary } = require("./nutrition");
 const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mealplan");
@@ -777,6 +778,65 @@ app.get("/api/profile/exercise", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || "Failed to load exercise data." });
+  }
+});
+
+// GET /api/profile/exercise/history?days=7 — recent activity rows (newest first)
+app.get("/api/profile/exercise/history", async (req, res) => {
+  try {
+    const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 30);
+    const entries = await getExerciseRecent(req.profileId, days);
+    res.json({ entries });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to load activity history." });
+  }
+});
+
+// POST /api/profile/exercise — manual activity entry for a date
+// Only updates the fields provided; merges with any existing row for that date.
+app.post("/api/profile/exercise", async (req, res) => {
+  try {
+    const date = req.body.date || todayDate();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: "Invalid date." });
+    }
+
+    // Validate each field independently — all are optional
+    const incoming = {};
+    const validators = {
+      steps:            { max: 200000, round: true,  label: "steps" },
+      active_calories:  { max: 10000,  round: false, label: "active calories" },
+      resting_calories: { max: 10000,  round: false, label: "resting calories" },
+      exercise_minutes: { max: 1440,   round: true,  label: "exercise minutes" },
+    };
+    for (const [field, { max, round: doRound, label }] of Object.entries(validators)) {
+      if (req.body[field] == null || req.body[field] === "") continue;
+      const v = Number(req.body[field]);
+      if (!Number.isFinite(v) || v < 0 || v > max) {
+        return res.status(400).json({ error: `Invalid ${label} (0–${max}).` });
+      }
+      incoming[field] = doRound ? Math.round(v) : v;
+    }
+    if (Object.keys(incoming).length === 0) {
+      return res.status(400).json({ error: "Enter at least one value." });
+    }
+
+    // Merge with any existing row so un-touched fields are preserved
+    const existing = await getExerciseByDate(req.profileId, date) || {};
+    const merged = {
+      steps:            incoming.steps            ?? existing.steps            ?? 0,
+      active_calories:  incoming.active_calories  ?? existing.active_calories  ?? 0,
+      resting_calories: incoming.resting_calories ?? existing.resting_calories ?? 0,
+      exercise_minutes: incoming.exercise_minutes ?? existing.exercise_minutes ?? 0,
+      source: "manual",
+    };
+
+    const entry = await upsertExercise(req.profileId, date, merged);
+    res.json({ entry });
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message || "Failed to save activity." });
   }
 });
 

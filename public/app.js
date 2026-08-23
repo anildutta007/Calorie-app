@@ -274,7 +274,7 @@ tabButtons.forEach((btn) => {
     if (btn.dataset.tab === "history") loadHistory();
     if (btn.dataset.tab === "plan") loadMealPlan();
     if (btn.dataset.tab === "progress") loadProgress();
-    if (btn.dataset.tab === "weight") loadWeightTab();
+    if (btn.dataset.tab === "health") loadHealthTab();
     if (btn.dataset.tab === "goal") {
       loadTargets(); // refresh target display at top of merged tab
       loadWeightGoal();
@@ -2781,16 +2781,168 @@ function renderProgress(dayRows) {
 
 // ── Weight tab ───────────────────────────────────────────────────────────────
 
-async function loadWeightTab() {
-  const container = document.getElementById("tab-weight");
-  container.innerHTML = `<div class="empty-state">Loading weight data…</div>`;
+async function loadHealthTab() {
+  const container = document.getElementById("tab-health");
+  container.innerHTML = `<div class="empty-state">Loading health data…</div>`;
   try {
-    const res = await fetch("/api/profile/weight?months=6", { headers: profileHeaders() });
-    const data = res.ok ? await res.json() : { entries: [] };
-    renderWeightSection(container, data.entries || []);
+    const [weightRes, activityRes] = await Promise.all([
+      fetch("/api/profile/weight?months=6",          { headers: profileHeaders() }),
+      fetch("/api/profile/exercise/history?days=14", { headers: profileHeaders() }),
+    ]);
+    const weightData   = weightRes.ok   ? await weightRes.json()   : { entries: [] };
+    const activityData = activityRes.ok ? await activityRes.json() : { entries: [] };
+
+    container.innerHTML = `<div id="health-weight-section"></div><div id="health-activity-section"></div>`;
+    renderWeightSection(document.getElementById("health-weight-section"), weightData.entries || []);
+    renderActivitySection(document.getElementById("health-activity-section"), activityData.entries || []);
   } catch (err) {
     container.innerHTML = `<div class="flag over">⚠️ ${escapeHtml(err.message)}</div>`;
   }
+}
+
+// ── Activity section (manual entry) ──────────────────────────────────────────
+
+function renderActivitySection(container, historyEntries) {
+  if (!container) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Build a lookup map from recent history so we can pre-fill on date change
+  const byDate = {};
+  (historyEntries || []).forEach(e => { byDate[e.date] = e; });
+
+  // Today's data (if any) — used to pre-populate the form initially
+  const todayData = byDate[today] || {};
+
+  // Recent history table (show last 14 days that have data)
+  const histRows = historyEntries.filter(e => e.steps || e.active_calories || e.exercise_minutes);
+  const histHtml = histRows.length ? `
+    <div class="act-history">
+      <div class="act-history-title muted" style="font-size:0.8rem;margin-bottom:6px">Recent entries</div>
+      ${histRows.map(e => {
+        const d = parseDateLocal(e.date);
+        const label = d.toLocaleDateString([], { weekday:"short", month:"short", day:"numeric" });
+        const parts = [];
+        if (e.steps)            parts.push(`👣 ${e.steps.toLocaleString()}`);
+        if (e.active_calories)  parts.push(`🔥 ${Math.round(e.active_calories)} kcal`);
+        if (e.exercise_minutes) parts.push(`⏱️ ${e.exercise_minutes} min`);
+        const src = e.source === "apple_health" ? " · ⌚ Auto" : "";
+        return `<div class="act-history-row">
+          <span class="act-history-date">${label}</span>
+          <span class="act-history-data">${parts.join(" · ")}${src}</span>
+        </div>`;
+      }).join("")}
+    </div>` : "";
+
+  container.innerHTML = `
+    <div class="card">
+      <h2>🏃 Daily Activity</h2>
+      <p class="muted" style="margin-bottom:14px">Enter any values you know — all fields are optional. Saving only updates the fields you fill in.</p>
+      <label for="act-date">Date</label>
+      <input type="date" id="act-date" value="${today}" max="${today}" />
+      <div class="act-grid">
+        <div>
+          <label for="act-steps">Steps</label>
+          <input type="number" id="act-steps" placeholder="e.g. 8 000" min="0" max="200000" step="1"
+            value="${todayData.steps || ""}" />
+        </div>
+        <div>
+          <label for="act-active-cal">Active calories (kcal)</label>
+          <input type="number" id="act-active-cal" placeholder="e.g. 400" min="0" max="10000" step="1"
+            value="${todayData.active_calories ? Math.round(todayData.active_calories) : ""}" />
+        </div>
+        <div>
+          <label for="act-rest-cal">Resting calories (kcal)</label>
+          <input type="number" id="act-rest-cal" placeholder="e.g. 1 650" min="0" max="10000" step="1"
+            value="${todayData.resting_calories ? Math.round(todayData.resting_calories) : ""}" />
+        </div>
+        <div>
+          <label for="act-mins">Exercise (minutes)</label>
+          <input type="number" id="act-mins" placeholder="e.g. 30" min="0" max="1440" step="1"
+            value="${todayData.exercise_minutes || ""}" />
+        </div>
+      </div>
+      <button id="act-save-btn" class="primary-btn" type="button" style="margin-top:12px">Save Activity</button>
+      <div id="act-status" class="muted" style="margin-top:6px;min-height:1.2em"></div>
+      <p class="muted" style="margin-top:14px;font-size:0.8rem">💡 Prefer automatic sync? Connect Apple Health in the <strong>🎯 Goals</strong> tab — no manual entry needed.</p>
+      ${histHtml}
+    </div>`;
+
+  // Date picker → pre-populate form with that day's existing data
+  document.getElementById("act-date")?.addEventListener("change", async (e) => {
+    const date = e.target.value;
+    // Check local cache first
+    if (byDate[date]) {
+      fillActivityForm(byDate[date]);
+      return;
+    }
+    // Otherwise fetch from server
+    try {
+      const res = await fetch(`/api/profile/exercise?date=${date}`, { headers: profileHeaders() });
+      const d = res.ok ? await res.json() : {};
+      fillActivityForm(d.exercise || {});
+    } catch { fillActivityForm({}); }
+  });
+
+  function fillActivityForm(data) {
+    document.getElementById("act-steps").value        = data.steps            || "";
+    document.getElementById("act-active-cal").value   = data.active_calories  ? Math.round(data.active_calories)  : "";
+    document.getElementById("act-rest-cal").value     = data.resting_calories ? Math.round(data.resting_calories) : "";
+    document.getElementById("act-mins").value         = data.exercise_minutes || "";
+  }
+
+  // Save button
+  document.getElementById("act-save-btn")?.addEventListener("click", async () => {
+    const date     = document.getElementById("act-date").value;
+    const steps    = document.getElementById("act-steps").value.trim();
+    const activeCal= document.getElementById("act-active-cal").value.trim();
+    const restCal  = document.getElementById("act-rest-cal").value.trim();
+    const mins     = document.getElementById("act-mins").value.trim();
+    const statusEl = document.getElementById("act-status");
+
+    if (!steps && !activeCal && !restCal && !mins) {
+      statusEl.textContent = "Enter at least one value."; return;
+    }
+
+    const body = { date };
+    if (steps)     body.steps            = Number(steps);
+    if (activeCal) body.active_calories  = Number(activeCal);
+    if (restCal)   body.resting_calories = Number(restCal);
+    if (mins)      body.exercise_minutes = Number(mins);
+
+    const btn = document.getElementById("act-save-btn");
+    setBusy(btn, true, "Saving…");
+    statusEl.textContent = "";
+
+    try {
+      const r = await fetch("/api/profile/exercise", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...profileHeaders() },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Failed to save.");
+      statusEl.textContent = "✓ Activity saved";
+      // Update local cache and refresh history list
+      byDate[date] = d.entry;
+      await refreshActivitySection();
+      // Also refresh Today tab exercise banner if the date is today
+      if (date === new Date().toISOString().slice(0, 10)) {
+        todayExercise = d.entry;
+        renderTodayExercise(document.getElementById("today-exercise"), todayExercise);
+        renderCircularTotals(
+          document.getElementById("today-totals"),
+          [],  // don't re-render meal arcs — just update summary line
+          todayTotal || {},
+          document.getElementById("today-summary")
+        );
+      }
+    } catch (err) {
+      statusEl.textContent = err.message;
+    } finally {
+      setBusy(btn, false, "Save Activity");
+    }
+  });
 }
 
 // ── Weight chart + log form ───────────────────────────────────────────────────
@@ -3021,12 +3173,22 @@ function renderWeightSection(container, entries) {
 }
 
 async function refreshWeightSection() {
-  const container = document.getElementById("tab-weight");
+  const container = document.getElementById("health-weight-section");
   if (!container) return;
   try {
     const res = await fetch("/api/profile/weight?months=6", { headers: profileHeaders() });
     const data = res.ok ? await res.json() : { entries: [] };
     renderWeightSection(container, data.entries || []);
+  } catch { /* silently skip */ }
+}
+
+async function refreshActivitySection() {
+  const container = document.getElementById("health-activity-section");
+  if (!container) return;
+  try {
+    const res = await fetch("/api/profile/exercise/history?days=14", { headers: profileHeaders() });
+    const data = res.ok ? await res.json() : { entries: [] };
+    renderActivitySection(container, data.entries || []);
   } catch { /* silently skip */ }
 }
 
