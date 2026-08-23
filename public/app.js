@@ -274,6 +274,7 @@ tabButtons.forEach((btn) => {
     if (btn.dataset.tab === "history") loadHistory();
     if (btn.dataset.tab === "plan") loadMealPlan();
     if (btn.dataset.tab === "progress") loadProgress();
+    if (btn.dataset.tab === "weight") loadWeightTab();
     if (btn.dataset.tab === "goal") {
       loadTargets(); // refresh target display at top of merged tab
       loadWeightGoal();
@@ -2664,14 +2665,10 @@ async function loadProgress() {
   const container = document.getElementById("tab-progress");
   container.innerHTML = `<div class="empty-state">Loading your progress...</div>`;
   try {
-    const [mealsRes, weightRes] = await Promise.all([
-      fetch("/api/progress?days=7",       { headers: profileHeaders() }),
-      fetch("/api/profile/weight?months=6", { headers: profileHeaders() }),
-    ]);
-    const data = await mealsRes.json();
-    if (!mealsRes.ok) throw new Error(data.error || "Failed to load progress.");
-    const weightData = weightRes.ok ? await weightRes.json() : { entries: [] };
-    renderProgress(data.days || [], weightData.entries || []);
+    const res = await fetch("/api/progress?days=7", { headers: profileHeaders() });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to load progress.");
+    renderProgress(data.days || []);
   } catch (err) {
     document.getElementById("tab-progress").innerHTML = `<div class="flag over">⚠️ ${escapeHtml(err.message)}</div>`;
   }
@@ -2685,7 +2682,7 @@ function parseDateLocal(dateStr) {
   return new Date(y, m - 1, d);
 }
 
-function renderProgress(dayRows, weightEntries = []) {
+function renderProgress(dayRows) {
   const container = document.getElementById("tab-progress");
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
@@ -2762,7 +2759,6 @@ function renderProgress(dayRows, weightEntries = []) {
       </div>
     </div>
     ${nutrientsHtml}
-    <div id="weight-section"></div>
   `;
 
   // Populate the 7-day macro overview table immediately (data already in hand)
@@ -2781,11 +2777,23 @@ function renderProgress(dayRows, weightEntries = []) {
       `<div class="muted" style="font-size:0.85rem">Log at least one full day of meals to get your AI diet summary.</div>`;
   }
 
-  // Render weight section below meal charts
-  renderWeightSection(document.getElementById("weight-section"), weightEntries);
 }
 
-// ── Weight chart + log form ──────────────────────────────────────────────────
+// ── Weight tab ───────────────────────────────────────────────────────────────
+
+async function loadWeightTab() {
+  const container = document.getElementById("tab-weight");
+  container.innerHTML = `<div class="empty-state">Loading weight data…</div>`;
+  try {
+    const res = await fetch("/api/profile/weight?months=6", { headers: profileHeaders() });
+    const data = res.ok ? await res.json() : { entries: [] };
+    renderWeightSection(container, data.entries || []);
+  } catch (err) {
+    container.innerHTML = `<div class="flag over">⚠️ ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+// ── Weight chart + log form ───────────────────────────────────────────────────
 
 function weightChartSvg(entries) {
   if (!entries.length) return "";
@@ -3013,7 +3021,7 @@ function renderWeightSection(container, entries) {
 }
 
 async function refreshWeightSection() {
-  const container = document.getElementById("weight-section");
+  const container = document.getElementById("tab-weight");
   if (!container) return;
   try {
     const res = await fetch("/api/profile/weight?months=6", { headers: profileHeaders() });
