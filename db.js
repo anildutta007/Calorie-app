@@ -118,6 +118,17 @@ async function init() {
       await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS sodium_mg REAL DEFAULT 0`;
       await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS saturated_fat_g REAL DEFAULT 0`;
 
+      // Weight log: manual weigh-ins recorded with date + time.
+      await sql`
+        CREATE TABLE IF NOT EXISTS weight_log (
+          id         SERIAL PRIMARY KEY,
+          profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+          weight_kg  REAL NOT NULL,
+          logged_at  TEXT NOT NULL,   -- ISO timestamp (preserves local date + time via UTC)
+          note       TEXT
+        )
+      `;
+
       // Apple Health sync: per-profile token used as a secret webhook URL segment.
       await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS health_sync_token TEXT UNIQUE`;
 
@@ -450,6 +461,34 @@ async function getAdminDailyUsage(date) {
   return rows;
 }
 
+// --- Weight log ---
+
+async function insertWeightLog(profileId, weight_kg, logged_at, note) {
+  await init();
+  const rows = await sql`
+    INSERT INTO weight_log (profile_id, weight_kg, logged_at, note)
+    VALUES (${profileId}, ${weight_kg}, ${logged_at}, ${note || null})
+    RETURNING *
+  `;
+  return rows[0];
+}
+
+// Returns all entries from fromDate (ISO string) onwards, oldest first.
+async function listWeightLog(profileId, fromDate) {
+  await init();
+  const rows = await sql`
+    SELECT * FROM weight_log
+    WHERE profile_id = ${profileId} AND logged_at >= ${fromDate}
+    ORDER BY logged_at ASC
+  `;
+  return rows;
+}
+
+async function deleteWeightLog(id, profileId) {
+  await init();
+  await sql`DELETE FROM weight_log WHERE id = ${id} AND profile_id = ${profileId}`;
+}
+
 // --- Apple Health sync (via "Health Auto Export" iOS app webhook) ---
 
 async function generateHealthSyncToken(profileId) {
@@ -531,6 +570,9 @@ module.exports = {
   setProfileBio,
   getProgressSummary,
   getAdminDailyUsage,
+  insertWeightLog,
+  listWeightLog,
+  deleteWeightLog,
   generateHealthSyncToken,
   getHealthSyncToken,
   revokeHealthSyncToken,

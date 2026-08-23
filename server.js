@@ -22,6 +22,9 @@ const {
   setProfileBio,
   getProgressSummary,
   getAdminDailyUsage,
+  insertWeightLog,
+  listWeightLog,
+  deleteWeightLog,
   generateHealthSyncToken,
   getHealthSyncToken,
   revokeHealthSyncToken,
@@ -676,6 +679,51 @@ app.post("/api/meals/suggest-completion/email", async (req, res) => {
   } catch (err) {
     console.error("suggest-completion/email error:", err);
     res.status(err.status || 500).json({ error: err.message || "Failed to send email." });
+  }
+});
+
+// --- Weight log routes (require X-Profile-Id) ---
+
+// POST /api/profile/weight — record a weigh-in
+app.post("/api/profile/weight", async (req, res) => {
+  try {
+    const weight_kg = Number(req.body.weight_kg);
+    if (!Number.isFinite(weight_kg) || weight_kg < 10 || weight_kg > 500) {
+      return res.status(400).json({ error: "Enter a valid weight between 10 and 500 kg." });
+    }
+    // Accept any past timestamp; reject >2 min in future (reuses the meal time validator)
+    const logged_at = parseMealTimeIso(req.body.logged_at) || new Date().toISOString();
+    const note = String(req.body.note || "").trim().slice(0, 200) || null;
+    const entry = await insertWeightLog(req.profileId, weight_kg, logged_at, note);
+    res.json({ entry });
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message || "Failed to log weight." });
+  }
+});
+
+// GET /api/profile/weight?months=6 — weight history for chart
+app.get("/api/profile/weight", async (req, res) => {
+  try {
+    const months = Math.min(Math.max(Number(req.query.months) || 6, 1), 24);
+    const from = new Date();
+    from.setMonth(from.getMonth() - months);
+    const entries = await listWeightLog(req.profileId, from.toISOString());
+    res.json({ entries });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to load weight history." });
+  }
+});
+
+// DELETE /api/profile/weight/:id — remove one entry
+app.delete("/api/profile/weight/:id", async (req, res) => {
+  try {
+    await deleteWeightLog(Number(req.params.id), req.profileId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to delete entry." });
   }
 });
 

@@ -2664,10 +2664,14 @@ async function loadProgress() {
   const container = document.getElementById("tab-progress");
   container.innerHTML = `<div class="empty-state">Loading your progress...</div>`;
   try {
-    const res = await fetch("/api/progress?days=7", { headers: profileHeaders() });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Failed to load progress.");
-    renderProgress(data.days || []);
+    const [mealsRes, weightRes] = await Promise.all([
+      fetch("/api/progress?days=7",       { headers: profileHeaders() }),
+      fetch("/api/profile/weight?months=6", { headers: profileHeaders() }),
+    ]);
+    const data = await mealsRes.json();
+    if (!mealsRes.ok) throw new Error(data.error || "Failed to load progress.");
+    const weightData = weightRes.ok ? await weightRes.json() : { entries: [] };
+    renderProgress(data.days || [], weightData.entries || []);
   } catch (err) {
     document.getElementById("tab-progress").innerHTML = `<div class="flag over">⚠️ ${escapeHtml(err.message)}</div>`;
   }
@@ -2681,7 +2685,7 @@ function parseDateLocal(dateStr) {
   return new Date(y, m - 1, d);
 }
 
-function renderProgress(dayRows) {
+function renderProgress(dayRows, weightEntries = []) {
   const container = document.getElementById("tab-progress");
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
@@ -2758,6 +2762,7 @@ function renderProgress(dayRows) {
       </div>
     </div>
     ${nutrientsHtml}
+    <div id="weight-section"></div>
   `;
 
   // Populate the 7-day macro overview table immediately (data already in hand)
@@ -2775,6 +2780,246 @@ function renderProgress(dayRows) {
     document.getElementById("ai-summary-card").innerHTML =
       `<div class="muted" style="font-size:0.85rem">Log at least one full day of meals to get your AI diet summary.</div>`;
   }
+
+  // Render weight section below meal charts
+  renderWeightSection(document.getElementById("weight-section"), weightEntries);
+}
+
+// ── Weight chart + log form ──────────────────────────────────────────────────
+
+function weightChartSvg(entries) {
+  if (!entries.length) return "";
+
+  const W = 340, H = 180;
+  const padL = 40, padR = 10, padT = 14, padB = 28;
+  const cW = W - padL - padR;
+  const cH = H - padT - padB;
+
+  // 6-month window ending today
+  const toTs   = Date.now();
+  const fromDt = new Date();
+  fromDt.setMonth(fromDt.getMonth() - 6);
+  fromDt.setHours(0, 0, 0, 0);
+  const fromTs = fromDt.getTime();
+  const spanMs = toTs - fromTs;
+
+  // Filter to entries in the window
+  const pts = entries
+    .map(e => ({ ts: new Date(e.logged_at).getTime(), w: e.weight_kg, id: e.id }))
+    .filter(p => p.ts >= fromTs && p.ts <= toTs)
+    .sort((a, b) => a.ts - b.ts);
+
+  if (!pts.length) {
+    // entries exist but all outside the window — should be rare
+    return `<div class="muted" style="text-align:center;padding:16px 0;font-size:0.85rem">No entries in the last 6 months.</div>`;
+  }
+
+  // Auto-scale Y axis
+  const weights = pts.map(p => p.w);
+  const rawMin  = Math.min(...weights);
+  const rawMax  = Math.max(...weights);
+  const pad     = Math.max(1, (rawMax - rawMin) * 0.25) || 2;
+  const minW    = Math.floor((rawMin - pad) * 2) / 2;
+  const maxW    = Math.ceil((rawMax + pad) * 2) / 2;
+  const wSpan   = maxW - minW || 1;
+
+  const xPos = ts => padL + ((ts - fromTs) / spanMs) * cW;
+  const yPos = kg => padT + (1 - (kg - minW) / wSpan) * cH;
+
+  // Y-axis grid ticks
+  const rawStep = (maxW - minW) / 4;
+  const step = rawStep < 1 ? 0.5 : rawStep < 2.5 ? 1 : rawStep < 5 ? 2 : 5;
+  const yTicks = [];
+  let t = Math.ceil(minW / step) * step;
+  while (t <= maxW + 0.01) { yTicks.push(Math.round(t * 10) / 10); t = Math.round((t + step) * 10) / 10; }
+
+  const gridLines = yTicks.map(val => {
+    const y = yPos(val).toFixed(1);
+    return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="var(--border)" stroke-width="1"/>
+            <text x="${padL - 4}" y="${(+y + 3.5).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)">${val}</text>`;
+  }).join("");
+
+  // Month separator lines + labels
+  const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const monthLines = [];
+  const mc = new Date(fromDt); mc.setDate(1); mc.setHours(0, 0, 0, 0);
+  if (mc.getTime() <= fromTs) mc.setMonth(mc.getMonth() + 1);
+  while (mc.getTime() <= toTs) {
+    const x = xPos(mc.getTime()).toFixed(1);
+    monthLines.push(
+      `<line x1="${x}" y1="${padT}" x2="${x}" y2="${H - padB}" stroke="var(--border)" stroke-width="1" stroke-dasharray="3,3"/>
+       <text x="${x}" y="${H - padB + 12}" text-anchor="middle" font-size="9" fill="var(--muted)">${MON[mc.getMonth()]}</text>`
+    );
+    mc.setMonth(mc.getMonth() + 1);
+  }
+
+  // SVG path
+  const pathCoords = pts.map((p, i) => `${i === 0 ? "M" : "L"}${xPos(p.ts).toFixed(1)},${yPos(p.w).toFixed(1)}`).join(" ");
+  const areaClose  = pts.length > 1
+    ? `L${xPos(pts[pts.length-1].ts).toFixed(1)},${H - padB} L${xPos(pts[0].ts).toFixed(1)},${H - padB}Z`
+    : "";
+
+  const area = pts.length > 1
+    ? `<path d="${pathCoords} ${areaClose}" fill="var(--accent)" fill-opacity="0.07"/>`
+    : "";
+  const line = pts.length > 1
+    ? `<path d="${pathCoords}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`
+    : "";
+
+  const dots = pts.map((p, i) => {
+    const isLast = i === pts.length - 1;
+    const cx = xPos(p.ts).toFixed(1);
+    const cy = yPos(p.w).toFixed(1);
+    const dateLabel = new Date(p.ts).toLocaleDateString([], { month:"short", day:"numeric" });
+    return `<circle cx="${cx}" cy="${cy}" r="${isLast ? 4.5 : 3}" fill="${isLast ? "var(--accent)" : "var(--card)"}" stroke="var(--accent)" stroke-width="2">
+              <title>${p.w} kg · ${dateLabel}</title>
+            </circle>`;
+  }).join("");
+
+  // Latest weight label — position to avoid clipping
+  const last = pts[pts.length - 1];
+  const lx = Math.min(xPos(last.ts) + 7, W - padR - 30);
+  const ly = Math.max(yPos(last.w) - 5, padT + 10);
+
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">
+    ${gridLines}
+    ${monthLines.join("")}
+    ${area}
+    ${line}
+    ${dots}
+    <text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" font-size="10" font-weight="700" fill="var(--accent)">${last.w}kg</text>
+  </svg>`;
+}
+
+function renderWeightSection(container, entries) {
+  if (!container) return;
+
+  const now      = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const timeStr  = now.toTimeString().slice(0, 5);
+
+  const latest       = entries.length ? entries[entries.length - 1] : null;
+  const latestKg     = latest ? `${latest.weight_kg} kg` : null;
+  const latestDateLbl = latest
+    ? new Date(latest.logged_at).toLocaleDateString([], { month: "short", day: "numeric" })
+    : null;
+
+  const chartHtml = entries.length
+    ? `<div class="weight-chart-wrap">${weightChartSvg(entries)}</div>`
+    : `<p class="muted" style="text-align:center;padding:20px 0 8px">No entries yet — log your first weigh-in below.</p>`;
+
+  // Entry list (newest first, up to 30)
+  const listItems = [...entries].reverse().slice(0, 30);
+  const listHtml = listItems.length
+    ? `<div class="weight-entry-list">
+        ${listItems.map(e => {
+          const d = new Date(e.logged_at);
+          const dateLbl = d.toLocaleDateString([], { weekday:"short", month:"short", day:"numeric" });
+          const timeLbl = d.toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" });
+          return `<div class="weight-entry-row">
+            <div class="weight-entry-info">
+              <span class="weight-entry-kg">${e.weight_kg} kg</span>
+              <span class="weight-entry-meta">${dateLbl} · ${timeLbl}</span>
+              ${e.note ? `<span class="weight-entry-note">${escapeHtml(e.note)}</span>` : ""}
+            </div>
+            <button class="weight-delete-btn icon-btn" data-id="${e.id}" type="button" title="Delete">🗑</button>
+          </div>`;
+        }).join("")}
+      </div>`
+    : "";
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="weight-header">
+        <h2>⚖️ Weight — 6 Months</h2>
+        ${latestKg ? `<div class="weight-latest">${latestKg} <span class="muted">${latestDateLbl}</span></div>` : ""}
+      </div>
+      ${chartHtml}
+      ${listHtml}
+    </div>
+    <div class="card">
+      <h2>Log a Weigh-in</h2>
+      <div class="weight-log-grid">
+        <div>
+          <label for="wl-kg">Weight (kg)</label>
+          <input type="number" id="wl-kg" placeholder="e.g. 72.5" min="10" max="500" step="0.1" />
+        </div>
+        <div>
+          <label for="wl-date">Date</label>
+          <input type="date" id="wl-date" value="${todayStr}" max="${todayStr}" />
+        </div>
+        <div>
+          <label for="wl-time">Time</label>
+          <input type="time" id="wl-time" value="${timeStr}" />
+        </div>
+      </div>
+      <label for="wl-note" style="margin-top:8px;display:block">Note <span class="label-opt">(optional)</span></label>
+      <input type="text" id="wl-note" placeholder="e.g. after morning walk, fasted" maxlength="200" />
+      <button id="wl-submit" class="primary-btn" type="button" style="margin-top:10px">Log Weight</button>
+      <div id="wl-status" class="muted" style="margin-top:6px;min-height:1.2em"></div>
+    </div>`;
+
+  // Wire log button
+  document.getElementById("wl-submit")?.addEventListener("click", async () => {
+    const kg      = parseFloat(document.getElementById("wl-kg").value);
+    const date    = document.getElementById("wl-date").value;
+    const time    = document.getElementById("wl-time").value || "00:00";
+    const note    = document.getElementById("wl-note").value.trim();
+    const statusEl = document.getElementById("wl-status");
+
+    if (!kg || !Number.isFinite(kg) || kg < 10 || kg > 500) {
+      statusEl.textContent = "Enter a valid weight between 10 and 500 kg."; return;
+    }
+    if (!date) { statusEl.textContent = "Select a date."; return; }
+
+    // Build ISO timestamp in local time (JS treats "2026-08-23T09:30:00" as local)
+    const logged_at = new Date(`${date}T${time}:00`).toISOString();
+    const btn = document.getElementById("wl-submit");
+    setBusy(btn, true, "Saving…");
+    statusEl.textContent = "";
+
+    try {
+      const r = await fetch("/api/profile/weight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...profileHeaders() },
+        body: JSON.stringify({ weight_kg: kg, logged_at, note }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Failed to log weight.");
+      statusEl.textContent = `✓ Logged ${kg} kg`;
+      document.getElementById("wl-kg").value = "";
+      document.getElementById("wl-note").value = "";
+      await refreshWeightSection();
+    } catch (err) {
+      statusEl.textContent = err.message;
+    } finally {
+      setBusy(btn, false, "Log Weight");
+    }
+  });
+
+  // Wire delete buttons
+  container.querySelectorAll(".weight-delete-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Delete this weight entry?")) return;
+      try {
+        const r = await fetch(`/api/profile/weight/${btn.dataset.id}`, {
+          method: "DELETE", headers: profileHeaders(),
+        });
+        if (!r.ok) throw new Error((await r.json()).error || "Failed.");
+        await refreshWeightSection();
+      } catch (err) { alert(err.message); }
+    });
+  });
+}
+
+async function refreshWeightSection() {
+  const container = document.getElementById("weight-section");
+  if (!container) return;
+  try {
+    const res = await fetch("/api/profile/weight?months=6", { headers: profileHeaders() });
+    const data = res.ok ? await res.json() : { entries: [] };
+    renderWeightSection(container, data.entries || []);
+  } catch { /* silently skip */ }
 }
 
 async function loadProgressAiSummary(week) {
