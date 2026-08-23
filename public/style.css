@@ -1616,6 +1616,42 @@ input[type="time"]#edit-meal-time:focus {
   padding: 4px 0 0;
 }
 
+/* g / ml unit toggle inside edit item row */
+.item-amount-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.item-amount-row .edit-item-grams {
+  flex: 1;
+  margin-bottom: 0;
+}
+.unit-toggle {
+  display: flex;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.unit-btn {
+  padding: 7px 11px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1;
+  transition: background 0.12s, color 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.unit-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
 /* --- Weight Goal tab --- */
 
 .bmi-row {

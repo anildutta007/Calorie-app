@@ -1355,17 +1355,33 @@ function openEditMealModal(meal) {
 // Only name/portion/grams are editable - calories/protein/carbs/fat are
 // always recalculated server-side from those, never hand-entered here.
 function buildEditItemRow(item) {
+  // Detect if this item was entered in ml (from portion_desc or item unit hint)
+  const isML = /ml\b/i.test(item?.portion_desc || "");
   const row = document.createElement("div");
   row.className = "edit-item-row";
   row.innerHTML = `
     <label>Name</label>
-    <input type="text" class="edit-item-name" value="${escapeHtml(item?.name || "")}" placeholder="e.g. Grilled chicken" />
+    <input type="text" class="edit-item-name" value="${escapeHtml(item?.name || "")}" placeholder="e.g. Milk, protein shake" />
     <label>Portion</label>
-    <input type="text" class="edit-item-portion" value="${escapeHtml(item?.portion_desc || "")}" placeholder="e.g. 1 cup" />
-    <label>Grams</label>
-    <input type="number" class="edit-item-grams" value="${item?.grams ?? ""}" min="0" />
+    <input type="text" class="edit-item-portion" value="${escapeHtml(item?.portion_desc || "")}" placeholder="e.g. 1 cup, 200ml, 1 scoop" />
+    <label>Amount</label>
+    <div class="item-amount-row">
+      <input type="number" class="edit-item-grams" value="${item?.grams ?? ""}" min="0" placeholder="e.g. 200" />
+      <div class="unit-toggle" role="group" aria-label="Unit">
+        <button type="button" class="unit-btn ${isML ? "" : "active"}" data-unit="g">g</button>
+        <button type="button" class="unit-btn ${isML ? "active" : ""}" data-unit="ml">ml</button>
+      </div>
+    </div>
     <button type="button" class="edit-item-remove">Remove item</button>
   `;
+  // Wire unit toggle
+  const unitBtns = row.querySelectorAll(".unit-btn");
+  unitBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      unitBtns.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+    });
+  });
   row.querySelector(".edit-item-remove").addEventListener("click", () => row.remove());
   return row;
 }
@@ -1384,11 +1400,16 @@ editMealSaveBtn.addEventListener("click", async () => {
   }
 
   const items = Array.from(editMealItemsContainer.querySelectorAll(".edit-item-row"))
-    .map((row) => ({
-      name: row.querySelector(".edit-item-name").value.trim(),
-      portion_desc: row.querySelector(".edit-item-portion").value.trim(),
-      grams: row.querySelector(".edit-item-grams").value,
-    }))
+    .map((row) => {
+      const name      = row.querySelector(".edit-item-name").value.trim();
+      const gramsRaw  = Number(row.querySelector(".edit-item-grams").value) || 0;
+      const unit      = row.querySelector(".unit-btn.active")?.dataset.unit || "g";
+      let portion_desc = row.querySelector(".edit-item-portion").value.trim();
+      // Auto-fill portion if blank — gives the server/AI the full context (e.g. "200 ml")
+      if (!portion_desc && gramsRaw) portion_desc = `${gramsRaw} ${unit}`;
+      // For ml: 1 ml ≈ 1 g (standard food-tracking convention; density tables omitted intentionally)
+      return { name, portion_desc, grams: gramsRaw };
+    })
     .filter((it) => it.name);
 
   if (!items.length) {
