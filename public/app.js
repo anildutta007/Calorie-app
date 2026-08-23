@@ -260,22 +260,18 @@ switchProfileBtn.addEventListener("click", () => {
 });
 
 // --- Tab switching ---
-const tabs         = document.querySelectorAll(".tab");
-const topTabBtns   = document.querySelectorAll(".top-tab-btn[data-tab]");
-const bottomTabBtns = document.querySelectorAll(".bottom-tab-btn[data-tab]");
+const tabs       = document.querySelectorAll(".tab");
+const topTabBtns = document.querySelectorAll(".top-tab-btn[data-tab]");
 
 function activateTab(name) {
   // Show the right section
   tabs.forEach((t) => t.classList.remove("active"));
   const section = document.getElementById(`tab-${name}`);
   if (section) section.classList.add("active");
-  // Highlight top or bottom button
+  // Highlight the matching nav button
   topTabBtns.forEach((b) => b.classList.remove("active"));
-  bottomTabBtns.forEach((b) => b.classList.remove("active"));
-  const topBtn    = document.querySelector(`.top-tab-btn[data-tab="${name}"]`);
-  const bottomBtn = document.querySelector(`.bottom-tab-btn[data-tab="${name}"]`);
-  if (topBtn)    topBtn.classList.add("active");
-  if (bottomBtn) bottomBtn.classList.add("active");
+  const topBtn = document.querySelector(`.top-tab-btn[data-tab="${name}"]`);
+  if (topBtn) topBtn.classList.add("active");
   // Always start at the top of the new tab
   window.scrollTo({ top: 0, behavior: "instant" });
 }
@@ -284,16 +280,8 @@ topTabBtns.forEach((btn) => {
   btn.addEventListener("click", () => {
     const name = btn.dataset.tab;
     activateTab(name);
-    if (name === "log")    resetLogTimes();
-    if (name === "today")  loadToday();
-    if (name === "health") loadHealthTab();
-  });
-});
-
-bottomTabBtns.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const name = btn.dataset.tab;
-    activateTab(name);
+    if (name === "log")      resetLogTimes();
+    if (name === "today")    loadToday();
     if (name === "history")  loadHistory();
     if (name === "plan")     loadMealPlan();
     if (name === "progress") loadProgress();

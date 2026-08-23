@@ -25,7 +25,7 @@ body {
 .app {
   max-width: 640px;
   margin: 0 auto;
-  padding: 16px 16px 82px;
+  padding: 16px 16px 24px;
 }
 
 header h1 {
@@ -85,21 +85,23 @@ header h1 {
   margin-top: 0;
 }
 
-/* ── Top navigation (Log Meal · Today · Health) ───────── */
+/* ── Main navigation (2 rows × 3 tabs) ────────────────── */
 .top-nav {
   display: flex;
+  flex-wrap: wrap;
   background: var(--card);
   border-bottom: 1px solid var(--border);
-  padding: 0 8px;
+  padding: 0;
   margin-bottom: 0;
 }
 
 .top-tab-btn {
-  flex: 1;
+  flex: 0 0 33.333%;
+  width: 33.333%;
   padding: 9px 4px 8px;
   border: none;
   background: none;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--muted);
   cursor: pointer;
@@ -111,59 +113,17 @@ header h1 {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Row separator between the two rows */
+.top-tab-btn:nth-child(n+4) {
+  border-top: 1px solid var(--border);
+}
+
 .top-tab-btn.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
 
-/* ── Bottom navigation ─────────────────────────────────── */
-.bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: 640px;
-  background: var(--card);
-  border-top: 1px solid var(--border);
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  height: 62px;
-  z-index: 100;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-.bottom-tab-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 8px 4px 4px;
-  position: relative;
-  font-family: inherit;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.bottom-tab-icon { font-size: 1.15rem; line-height: 1; }
-.bottom-tab-label { font-size: 0.63rem; font-weight: 600; color: var(--muted); letter-spacing: 0.01em; }
-
-.bottom-tab-btn::before {
-  content: "";
-  position: absolute;
-  top: 0; left: 50%;
-  transform: translateX(-50%);
-  width: 0; height: 3px;
-  background: var(--accent);
-  border-radius: 0 0 3px 3px;
-  transition: width 0.15s ease;
-}
-.bottom-tab-btn.active::before { width: 28px; }
-.bottom-tab-btn.active .bottom-tab-label { color: var(--accent); }
-.bottom-tab-btn.active .more-dots { color: var(--accent); }
+/* ── (bottom-nav removed — all tabs are in the 2-row top nav) ── */
 
 /* ── More drawer ───────────────────────────────────────── */
 .more-overlay {
