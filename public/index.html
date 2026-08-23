@@ -77,6 +77,13 @@
       </div>
     </header>
 
+    <!-- TOP NAV (Log Meal · Today · Health) -->
+    <nav class="top-nav">
+      <button class="top-tab-btn active" data-tab="log">📝 Log Meal</button>
+      <button class="top-tab-btn" data-tab="today">📅 Today</button>
+      <button class="top-tab-btn" data-tab="health">❤️ Health</button>
+    </nav>
+
     <!-- LOG TAB -->
     <section id="tab-log" class="tab active">
       <div id="daily-greeting" class="greeting-strip" style="display:none"></div>
@@ -202,12 +209,8 @@
       <div class="empty-state">Tap the Health tab to load your data.</div>
     </section>
 
-    <!-- BOTTOM NAV -->
+    <!-- BOTTOM NAV (History · Plan · Progress · Goals) -->
     <nav class="bottom-nav">
-      <button class="bottom-tab-btn" data-tab="today">
-        <span class="bottom-tab-icon">📅</span>
-        <span class="bottom-tab-label">Today</span>
-      </button>
       <button class="bottom-tab-btn" data-tab="history">
         <span class="bottom-tab-icon">📊</span>
         <span class="bottom-tab-label">History</span>
@@ -216,30 +219,15 @@
         <span class="bottom-tab-icon">🥗</span>
         <span class="bottom-tab-label">Plan</span>
       </button>
-      <button class="bottom-tab-btn" id="more-nav-btn">
-        <span class="bottom-tab-icon more-dots">•••</span>
-        <span class="bottom-tab-label">More</span>
+      <button class="bottom-tab-btn" data-tab="progress">
+        <span class="bottom-tab-icon">📈</span>
+        <span class="bottom-tab-label">Progress</span>
+      </button>
+      <button class="bottom-tab-btn" data-tab="goal">
+        <span class="bottom-tab-icon">🎯</span>
+        <span class="bottom-tab-label">Goals</span>
       </button>
     </nav>
-
-    <!-- MORE DRAWER -->
-    <div class="more-overlay" id="more-overlay"></div>
-    <div class="more-drawer" id="more-drawer">
-      <div class="more-drawer-handle"></div>
-      <div class="more-drawer-title">More</div>
-      <button class="more-drawer-item" data-tab="progress">
-        <span class="more-drawer-icon">📈</span>
-        <div><div class="more-drawer-label">Progress</div><div class="more-drawer-sub">7-day charts &amp; AI summary</div></div>
-      </button>
-      <button class="more-drawer-item" data-tab="health">
-        <span class="more-drawer-icon">❤️</span>
-        <div><div class="more-drawer-label">Health</div><div class="more-drawer-sub">Weight chart &amp; daily activity</div></div>
-      </button>
-      <button class="more-drawer-item" data-tab="goal">
-        <span class="more-drawer-icon">🎯</span>
-        <div><div class="more-drawer-label">Goals</div><div class="more-drawer-sub">Targets, BMI &amp; Apple Health sync</div></div>
-      </button>
-    </div>
 
     <!-- GOALS TAB (merged Target + Goal) -->
     <section id="tab-goal" class="tab" data-tab="goal">

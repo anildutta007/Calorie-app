@@ -260,52 +260,31 @@ switchProfileBtn.addEventListener("click", () => {
 });
 
 // --- Tab switching ---
-const tabs = document.querySelectorAll(".tab");
+const tabs         = document.querySelectorAll(".tab");
+const topTabBtns   = document.querySelectorAll(".top-tab-btn[data-tab]");
 const bottomTabBtns = document.querySelectorAll(".bottom-tab-btn[data-tab]");
-const moreNavBtn = document.getElementById("more-nav-btn");
-const moreOverlay = document.getElementById("more-overlay");
-const moreDrawer  = document.getElementById("more-drawer");
-const moreDrawerItems = document.querySelectorAll(".more-drawer-item[data-tab]");
 
 function activateTab(name) {
+  // Show the right section
   tabs.forEach((t) => t.classList.remove("active"));
   const section = document.getElementById(`tab-${name}`);
   if (section) section.classList.add("active");
-  // Update bottom-nav active state
+  // Highlight top or bottom button
+  topTabBtns.forEach((b) => b.classList.remove("active"));
   bottomTabBtns.forEach((b) => b.classList.remove("active"));
-  const matchBtn = document.querySelector(`.bottom-tab-btn[data-tab="${name}"]`);
-  if (matchBtn) matchBtn.classList.add("active");
-  // Deactivate More button unless we're still on log (home)
-  if (!matchBtn && name !== "log") {
-    moreNavBtn.classList.add("active");
-  } else {
-    moreNavBtn.classList.remove("active");
-  }
+  const topBtn    = document.querySelector(`.top-tab-btn[data-tab="${name}"]`);
+  const bottomBtn = document.querySelector(`.bottom-tab-btn[data-tab="${name}"]`);
+  if (topBtn)    topBtn.classList.add("active");
+  if (bottomBtn) bottomBtn.classList.add("active");
 }
 
-function openMoreDrawer() {
-  moreOverlay.classList.add("open");
-  moreDrawer.classList.add("open");
-  moreNavBtn.classList.add("active");
-  bottomTabBtns.forEach((b) => b.classList.remove("active"));
-}
-
-function closeMoreDrawer() {
-  moreOverlay.classList.remove("open");
-  moreDrawer.classList.remove("open");
-}
-
-moreNavBtn.addEventListener("click", openMoreDrawer);
-moreOverlay.addEventListener("click", closeMoreDrawer);
-
-moreDrawerItems.forEach((item) => {
-  item.addEventListener("click", () => {
-    const name = item.dataset.tab;
-    closeMoreDrawer();
+topTabBtns.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const name = btn.dataset.tab;
     activateTab(name);
-    if (name === "progress") loadProgress();
+    if (name === "log")    resetLogTimes();
+    if (name === "today")  loadToday();
     if (name === "health") loadHealthTab();
-    if (name === "goal") { loadTargets(); loadWeightGoal(); loadHealthSyncCard(); }
   });
 });
 
@@ -313,10 +292,10 @@ bottomTabBtns.forEach((btn) => {
   btn.addEventListener("click", () => {
     const name = btn.dataset.tab;
     activateTab(name);
-    closeMoreDrawer();
-    if (name === "today")   loadToday();
-    if (name === "history") loadHistory();
-    if (name === "plan")    loadMealPlan();
+    if (name === "history")  loadHistory();
+    if (name === "plan")     loadMealPlan();
+    if (name === "progress") loadProgress();
+    if (name === "goal")     { loadTargets(); loadWeightGoal(); loadHealthSyncCard(); }
   });
 });
 
@@ -324,7 +303,6 @@ bottomTabBtns.forEach((btn) => {
 document.querySelector("#app-main .app-logo").addEventListener("click", () => {
   activateTab("log");
   resetLogTimes();
-  closeMoreDrawer();
 });
 
 // --- Voice input (Web Speech API) ---
