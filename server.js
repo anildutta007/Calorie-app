@@ -896,7 +896,11 @@ app.get("/api/health", (req, res) => {
 });
 
 app.get("/api/version", (req, res) => {
-  res.json({ version: require("./package.json").version });
+  const base = require("./package.json").version;
+  // On Vercel each deploy gets a unique commit SHA — show the first 7 chars
+  // so the badge always reflects exactly which build is running.
+  const sha = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7);
+  res.json({ version: sha ? `${base} · ${sha}` : base });
 });
 
 // ── Admin: daily usage report (called by Vercel Cron at 00:30 UTC = 06:00 IST) ──
