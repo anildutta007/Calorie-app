@@ -22,6 +22,12 @@ const {
   setProfileBio,
   getProgressSummary,
   getAdminDailyUsage,
+  generateHealthSyncToken,
+  getHealthSyncToken,
+  revokeHealthSyncToken,
+  getProfileByHealthToken,
+  upsertExercise,
+  getExerciseByDate,
 } = require("./db");
 const { analyzeMealText, analyzeMealPhoto, estimateItemMacros, generateDailyQuote, generateProgressSummary } = require("./nutrition");
 const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mealplan");
@@ -670,6 +676,110 @@ app.post("/api/meals/suggest-completion/email", async (req, res) => {
   } catch (err) {
     console.error("suggest-completion/email error:", err);
     res.status(err.status || 500).json({ error: err.message || "Failed to send email." });
+  }
+});
+
+// --- Apple Health sync (Health Auto Export webhook) ---
+
+// GET /api/profile/health-token — check connection status + current webhook URL
+app.get("/api/profile/health-token", async (req, res) => {
+  try {
+    const token = await getHealthSyncToken(req.profileId);
+    const host = req.get("x-forwarded-host") || req.get("host");
+    const proto = req.get("x-forwarded-proto") || req.protocol;
+    const webhookUrl = token ? `${proto}://${host}/api/health-sync/${token}` : null;
+    res.json({ connected: !!token, webhookUrl });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to check health token." });
+  }
+});
+
+// POST /api/profile/health-token — generate (or replace) a sync token
+app.post("/api/profile/health-token", async (req, res) => {
+  try {
+    const token = await generateHealthSyncToken(req.profileId);
+    const host = req.get("x-forwarded-host") || req.get("host");
+    const proto = req.get("x-forwarded-proto") || req.protocol;
+    const webhookUrl = `${proto}://${host}/api/health-sync/${token}`;
+    res.json({ token, webhookUrl });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to generate health token." });
+  }
+});
+
+// DELETE /api/profile/health-token — revoke the sync token
+app.delete("/api/profile/health-token", async (req, res) => {
+  try {
+    await revokeHealthSyncToken(req.profileId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to revoke health token." });
+  }
+});
+
+// GET /api/profile/exercise?date=YYYY-MM-DD — exercise data for one day
+app.get("/api/profile/exercise", async (req, res) => {
+  try {
+    const date = req.query.date || todayDate();
+    const exercise = await getExerciseByDate(req.profileId, date);
+    res.json({ exercise: exercise || null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to load exercise data." });
+  }
+});
+
+// POST /api/health-sync/:token — PUBLIC webhook; token is the auth secret.
+// Called automatically by the "Health Auto Export" iOS app (free, by Gregory Yount).
+// Payload: { data: { metrics: [{ name, units, data: [{date, qty}] }] } }
+// Note: this route is intentionally NOT covered by requireProfile middleware.
+app.post("/api/health-sync/:token", async (req, res) => {
+  try {
+    const profile = await getProfileByHealthToken(req.params.token);
+    if (!profile) return res.status(401).json({ error: "Invalid or expired sync token." });
+
+    const metrics = req.body?.data?.metrics;
+    if (!Array.isArray(metrics) || metrics.length === 0) {
+      return res.status(400).json({ error: "No metrics array found in payload." });
+    }
+
+    // Aggregate data keyed by YYYY-MM-DD date
+    // Health Auto Export date format: "2026-08-23 00:00:00 +0530"
+    const byDate = {};
+    for (const metric of metrics) {
+      const { name, data: entries } = metric;
+      if (!Array.isArray(entries)) continue;
+      for (const entry of entries) {
+        const date = String(entry.date || "").slice(0, 10); // grab YYYY-MM-DD
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+        if (!byDate[date]) byDate[date] = {};
+        const qty = Number(entry.qty) || 0;
+        if (name === "step_count")          byDate[date].steps            = Math.round(qty);
+        if (name === "active_energy")       byDate[date].active_calories  = qty;
+        if (name === "basal_energy_burned") byDate[date].resting_calories = qty;
+        if (name === "exercise_time")       byDate[date].exercise_minutes = Math.round(qty);
+      }
+    }
+
+    const dates = Object.keys(byDate);
+    if (dates.length === 0) {
+      return res.status(400).json({ error: "No valid dated entries found in payload." });
+    }
+
+    let synced = 0;
+    for (const date of dates) {
+      await upsertExercise(profile.id, date, byDate[date]);
+      synced++;
+    }
+
+    console.log(`[health-sync] ${profile.name} (id=${profile.id}): synced ${synced} day(s)`);
+    res.json({ ok: true, profile: profile.name, synced });
+  } catch (err) {
+    console.error("[health-sync] Error:", err);
+    res.status(500).json({ error: err.message || "Sync failed." });
   }
 });
 

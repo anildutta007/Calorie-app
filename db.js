@@ -117,6 +117,25 @@ async function init() {
       await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS sugar_g REAL DEFAULT 0`;
       await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS sodium_mg REAL DEFAULT 0`;
       await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS saturated_fat_g REAL DEFAULT 0`;
+
+      // Apple Health sync: per-profile token used as a secret webhook URL segment.
+      await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS health_sync_token TEXT UNIQUE`;
+
+      // Exercise data pushed from Apple Health via the "Health Auto Export" iOS app.
+      await sql`
+        CREATE TABLE IF NOT EXISTS exercise_log (
+          id               SERIAL PRIMARY KEY,
+          profile_id       INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+          date             TEXT NOT NULL,
+          steps            INTEGER DEFAULT 0,
+          active_calories  REAL DEFAULT 0,
+          resting_calories REAL DEFAULT 0,
+          exercise_minutes INTEGER DEFAULT 0,
+          source           TEXT DEFAULT 'apple_health',
+          synced_at        TEXT NOT NULL,
+          UNIQUE(profile_id, date)
+        )
+      `;
     })();
     // If init fails (e.g. all retries exhausted), reset so the next call can
     // retry from scratch rather than re-throwing the stale rejection forever.
@@ -431,6 +450,68 @@ async function getAdminDailyUsage(date) {
   return rows;
 }
 
+// --- Apple Health sync (via "Health Auto Export" iOS app webhook) ---
+
+async function generateHealthSyncToken(profileId) {
+  await init();
+  const token = crypto.randomBytes(24).toString("hex");
+  const rows = await sql`
+    UPDATE profiles SET health_sync_token = ${token} WHERE id = ${profileId}
+    RETURNING health_sync_token
+  `;
+  return rows[0]?.health_sync_token || null;
+}
+
+async function getHealthSyncToken(profileId) {
+  await init();
+  const rows = await sql`SELECT health_sync_token FROM profiles WHERE id = ${profileId}`;
+  return rows[0]?.health_sync_token || null;
+}
+
+async function revokeHealthSyncToken(profileId) {
+  await init();
+  await sql`UPDATE profiles SET health_sync_token = NULL WHERE id = ${profileId}`;
+}
+
+// Look up a profile by its health sync token (used in the public webhook handler).
+async function getProfileByHealthToken(token) {
+  await init();
+  if (!token) return null;
+  const rows = await sql`SELECT id, name FROM profiles WHERE health_sync_token = ${token}`;
+  return rows[0] || null;
+}
+
+// Upsert one day of exercise data for a profile.
+async function upsertExercise(profileId, date, data) {
+  await init();
+  const rows = await sql`
+    INSERT INTO exercise_log
+      (profile_id, date, steps, active_calories, resting_calories, exercise_minutes, source, synced_at)
+    VALUES (
+      ${profileId}, ${date},
+      ${data.steps || 0}, ${data.active_calories || 0},
+      ${data.resting_calories || 0}, ${data.exercise_minutes || 0},
+      ${"apple_health"}, ${new Date().toISOString()}
+    )
+    ON CONFLICT (profile_id, date) DO UPDATE SET
+      steps            = EXCLUDED.steps,
+      active_calories  = EXCLUDED.active_calories,
+      resting_calories = EXCLUDED.resting_calories,
+      exercise_minutes = EXCLUDED.exercise_minutes,
+      synced_at        = EXCLUDED.synced_at
+    RETURNING *
+  `;
+  return rows[0] || null;
+}
+
+async function getExerciseByDate(profileId, date) {
+  await init();
+  const rows = await sql`
+    SELECT * FROM exercise_log WHERE profile_id = ${profileId} AND date = ${date}
+  `;
+  return rows[0] || null;
+}
+
 module.exports = {
   insertMeal,
   getMeal,
@@ -450,4 +531,10 @@ module.exports = {
   setProfileBio,
   getProgressSummary,
   getAdminDailyUsage,
+  generateHealthSyncToken,
+  getHealthSyncToken,
+  revokeHealthSyncToken,
+  getProfileByHealthToken,
+  upsertExercise,
+  getExerciseByDate,
 };

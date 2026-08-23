@@ -277,6 +277,7 @@ tabButtons.forEach((btn) => {
     if (btn.dataset.tab === "goal") {
       loadTargets(); // refresh target display at top of merged tab
       loadWeightGoal();
+      loadHealthSyncCard();
     }
   });
 });
@@ -716,8 +717,16 @@ function statNote(value, target, mode) {
 function daySummaryLine(total) {
   if (!currentTargets || !currentTargets.calories) return "";
   const parts = [];
-  const calDiff = currentTargets.calories - total.calories;
-  parts.push(calDiff >= 0 ? `${Math.round(calDiff)} kcal remaining` : `${Math.round(-calDiff)} kcal over target`);
+  const burned = (todayExercise?.active_calories) || 0;
+  const netBudget = currentTargets.calories + burned;
+  const calDiff = netBudget - total.calories;
+  if (burned > 0) {
+    parts.push(calDiff >= 0
+      ? `${Math.round(calDiff)} kcal remaining (incl. ${Math.round(burned)} burned)`
+      : `${Math.round(-calDiff)} kcal over budget (incl. ${Math.round(burned)} burned)`);
+  } else {
+    parts.push(calDiff >= 0 ? `${Math.round(calDiff)} kcal remaining` : `${Math.round(-calDiff)} kcal over target`);
+  }
   if (currentTargets.protein_g) {
     const proteinDiff = currentTargets.protein_g - total.protein_g;
     parts.push(proteinDiff <= 0 ? "protein goal met" : `${round1(proteinDiff)}g more protein needed`);
@@ -728,18 +737,40 @@ function daySummaryLine(total) {
 // --- Today tab ---
 async function loadToday() {
   try {
-    const res = await fetch("/api/meals", { headers: profileHeaders() });
-    if (res.status >= 500) throw new Error(`Server error ${res.status}`);
-    const data = await res.json();
+    const [mealsRes, exerciseRes] = await Promise.all([
+      fetch("/api/meals",             { headers: profileHeaders() }),
+      fetch("/api/profile/exercise",  { headers: profileHeaders() }),
+    ]);
+    if (mealsRes.status >= 500) throw new Error(`Server error ${mealsRes.status}`);
+    const data = await mealsRes.json();
+    todayExercise = exerciseRes.ok ? (await exerciseRes.json()).exercise : null;
     hideDbBanner();
     todayTotal = data.total; // keep a reference for the "complete my day" feature
     updateSuggestCard();
     renderCircularTotals(document.getElementById("today-totals"), data.meals, data.total, document.getElementById("today-summary"));
+    renderTodayExercise(document.getElementById("today-exercise"), todayExercise);
     renderDayTimeline(document.getElementById("today-list"), data.meals, true, loadToday, false);
     renderAllFlags(document.getElementById("today-flags"), data.meals);
   } catch (err) {
     showDbBanner(loadToday);
   }
+}
+
+function renderTodayExercise(container, exercise) {
+  if (!container) return;
+  if (!exercise || (!exercise.steps && !exercise.active_calories && !exercise.exercise_minutes)) {
+    container.innerHTML = "";
+    return;
+  }
+  const parts = [];
+  if (exercise.steps)            parts.push(`👣 ${exercise.steps.toLocaleString()} steps`);
+  if (exercise.active_calories)  parts.push(`🔥 ${Math.round(exercise.active_calories)} kcal burned`);
+  if (exercise.exercise_minutes) parts.push(`⏱️ ${exercise.exercise_minutes} min active`);
+  container.innerHTML = `
+    <div class="exercise-banner">
+      <span class="exercise-banner-data">${parts.join(" &thinsp;·&thinsp; ")}</span>
+      <span class="exercise-banner-source">⌚ Apple Health</span>
+    </div>`;
 }
 
 function renderAllFlags(container, meals) {
@@ -967,7 +998,8 @@ function buildCircleSvg(macro, meals, total) {
 }
 
 let mealsById = {}; // last-rendered meals, keyed by id, so Edit can look up full item data without refetching
-let todayTotal = null; // {calories, protein_g, carbs_g, fat_g} — updated on every loadToday()
+let todayTotal = null;    // {calories, protein_g, carbs_g, fat_g} — updated on every loadToday()
+let todayExercise = null; // exercise_log row for today from Apple Health, or null
 
 function renderMealList(container, meals, showEdit) {
   meals.forEach((m) => (mealsById[m.id] = m));
@@ -2209,6 +2241,114 @@ document.getElementById("suggest-email-btn").addEventListener("click", async fun
     setBusy(btn, false, "📧 Send");
   }
 });
+
+// --- Apple Health sync card (Goals tab) ---
+
+async function loadHealthSyncCard() {
+  const container = document.getElementById("health-sync-section");
+  if (!container) return;
+  try {
+    const res = await fetch("/api/profile/health-token", { headers: profileHeaders() });
+    if (!res.ok) return; // silently skip on auth errors
+    const data = await res.json();
+    renderHealthSyncCard(container, data);
+  } catch {
+    // supplementary feature — don't surface errors
+  }
+}
+
+function renderHealthSyncCard(container, data) {
+  const { connected, webhookUrl } = data;
+  container.innerHTML = `
+    <div class="card health-sync-card">
+      <h2>⌚ Apple Health Sync</h2>
+      <p class="muted" style="margin-bottom:14px">
+        Connect the free <strong>Health Auto Export</strong> app (by Gregory Yount) to automatically
+        push your steps, burned calories, and exercise minutes from Apple Health every day.
+        Your calorie budget on the Today tab will update to reflect what you've burned.
+      </p>
+      ${connected ? `
+        <div class="health-sync-status-row">
+          <span class="health-sync-badge connected">✓ Connected</span>
+        </div>
+        <p class="muted" style="margin:10px 0 4px;font-size:0.82rem">Your webhook URL <span class="muted">(tap to copy)</span>:</p>
+        <div class="health-sync-url" id="health-sync-url-display">${escapeHtml(webhookUrl)}</div>
+        <div id="health-sync-copy-msg" class="muted" style="font-size:0.78rem;min-height:1.2em;margin-top:3px"></div>
+        <div style="margin-top:10px">
+          <button id="health-sync-revoke-btn" class="secondary-btn" type="button">Disconnect</button>
+        </div>
+        <details class="health-sync-setup" open>
+          <summary>📱 How to set up Health Auto Export</summary>
+          <ol class="health-sync-steps">
+            <li>Install <strong>Health Auto Export</strong> from the App Store (free, by Gregory Yount).</li>
+            <li>Open the app → tap <strong>Automations</strong> → <strong>+</strong> → <strong>REST API Automation</strong>.</li>
+            <li>Paste the URL above into the <strong>URL</strong> field. Set Method to <strong>POST</strong>.</li>
+            <li>Under <strong>Metrics</strong>, enable: <em>Step Count</em>, <em>Active Energy Burned</em>, <em>Resting Energy Burned</em>, <em>Exercise Time</em>.</li>
+            <li>Set <strong>Export Frequency</strong> to <em>Daily</em> and save. Done!</li>
+          </ol>
+          <p class="muted" style="margin:8px 0 0;font-size:0.8rem">The app pushes the previous day's data every morning. Your Today tab will show steps and burned calories as soon as it syncs.</p>
+        </details>
+      ` : `
+        <div class="health-sync-status-row">
+          <span class="health-sync-badge disconnected">Not connected</span>
+        </div>
+        <p class="muted" style="margin:10px 0 14px;font-size:0.88rem">
+          Generate a private webhook URL for this profile, then paste it into Health Auto Export on your iPhone.
+          No Apple developer account or OAuth needed.
+        </p>
+        <button id="health-sync-connect-btn" class="primary-btn" type="button">🔗 Generate Webhook URL</button>
+      `}
+      <div id="health-sync-error" class="flag over" style="display:none;margin-top:10px"></div>
+    </div>`;
+
+  if (connected) {
+    const urlEl     = document.getElementById("health-sync-url-display");
+    const copyMsg   = document.getElementById("health-sync-copy-msg");
+    urlEl?.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(webhookUrl);
+        copyMsg.textContent = "✓ Copied to clipboard";
+        setTimeout(() => { copyMsg.textContent = ""; }, 2500);
+      } catch {
+        copyMsg.textContent = "Tap and hold the URL to copy manually.";
+      }
+    });
+
+    document.getElementById("health-sync-revoke-btn")?.addEventListener("click", async () => {
+      const errEl = document.getElementById("health-sync-error");
+      errEl.style.display = "none";
+      if (!confirm("Disconnect Apple Health sync? Your historical exercise data will be kept.")) return;
+      const btn = document.getElementById("health-sync-revoke-btn");
+      setBusy(btn, true, "Disconnecting…");
+      try {
+        const r = await fetch("/api/profile/health-token", { method: "DELETE", headers: profileHeaders() });
+        if (!r.ok) throw new Error((await r.json()).error || "Failed to disconnect.");
+        await loadHealthSyncCard();
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = "block";
+        setBusy(btn, false, "Disconnect");
+      }
+    });
+  } else {
+    document.getElementById("health-sync-connect-btn")?.addEventListener("click", async () => {
+      const errEl = document.getElementById("health-sync-error");
+      errEl.style.display = "none";
+      const btn = document.getElementById("health-sync-connect-btn");
+      setBusy(btn, true, "Generating…");
+      try {
+        const r = await fetch("/api/profile/health-token", { method: "POST", headers: profileHeaders() });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Failed to generate URL.");
+        await loadHealthSyncCard();
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = "block";
+        setBusy(btn, false, "🔗 Generate Webhook URL");
+      }
+    });
+  }
+}
 
 // --- Weight Goal tab ---
 
