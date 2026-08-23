@@ -1403,6 +1403,57 @@ input[type="time"]#edit-meal-time:focus {
   flex-shrink: 0;
 }
 
+/* ── Zone Timeline (Today + History tabs) ─────────────────────────────── */
+.zone-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.zt-section {
+  padding: 4px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.zt-section:last-child { border-bottom: none; }
+
+.zt-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 0 6px;
+  flex-wrap: wrap;
+}
+
+.zt-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.zt-zone-title {
+  font-weight: 700;
+  font-size: 0.88rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.zt-time-range {
+  font-size: 0.73rem;
+}
+
+.zt-count {
+  font-size: 0.73rem;
+}
+
+.zt-empty .zt-header { opacity: 0.45; }
+.zt-empty .zt-empty-msg { opacity: 0.45; }
+
+.zt-empty-msg {
+  font-size: 0.78rem;
+  padding: 2px 0 6px 18px;
+}
+
 /* ── History tab: 7-day macro overview table ───────────────────────────── */
 
 .hw-scroll {

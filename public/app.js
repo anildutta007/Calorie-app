@@ -755,9 +755,10 @@ async function loadToday() {
     hideDbBanner();
     todayTotal = data.total; // keep a reference for the "complete my day" feature
     updateSuggestCard();
+    renderCircularTotals(document.getElementById("today-macro-circles"), data.meals, data.total, null);
     renderTimezoneClock(document.getElementById("today-totals"), data.meals, data.total, document.getElementById("today-summary"));
     renderTodayExercise(document.getElementById("today-exercise"), todayExercise);
-    renderDayTimeline(document.getElementById("today-list"), data.meals, true, loadToday, false);
+    renderZoneTimeline(document.getElementById("today-list"), data.meals, true, loadToday);
     renderAllFlags(document.getElementById("today-flags"), data.meals);
   } catch (err) {
     showDbBanner(loadToday);
@@ -1095,7 +1096,7 @@ function renderTimezoneClock(container, meals, total, summaryEl) {
   s.push(`<text x="${cx}" y="${cy + 18}" text-anchor="middle" dominant-baseline="middle" font-size="8.5" fill="var(--muted,#6b7280)" font-family="inherit">${totalProt}g protein</text>`);
   s.push(`</svg>`);
 
-  // ── Zone breakdown ────────────────────────────────────────
+  // ── Compact zone summary (individual meals shown in zone timeline below) ──
   let bd = `<div class="tz-breakdown">`;
   ZONES.forEach((z, i) => {
     const zd    = zm[i];
@@ -1106,17 +1107,11 @@ function renderTimezoneClock(container, meals, total, summaryEl) {
         <strong class="tz-zone-name">${z.emoji} ${z.name}</strong>
         <span class="tz-range muted">${range}</span>
         ${zd.cal > 0 ? `<strong class="tz-cal">${Math.round(zd.cal)} kcal</strong>` : ""}
-      </div>`;
-    if (zd.list.length) {
-      bd += `<div class="tz-macros muted">P ${Math.round(zd.prot)}g · C ${Math.round(zd.carbs)}g · F ${Math.round(zd.fat)}g</div>`;
-      zd.list.forEach(m => {
-        const t = new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        bd += `<div class="tz-meal-row"><span class="tz-t">${t}</span><span class="tz-desc">${escapeHtml(m.description || "")}</span><span class="tz-mcal muted">${Math.round(m.calories || 0)} kcal</span></div>`;
-      });
-    } else {
-      bd += `<div class="tz-macros muted tz-empty">No meals logged</div>`;
-    }
-    bd += `</div>`;
+      </div>
+      ${zd.list.length
+        ? `<div class="tz-macros muted">P ${Math.round(zd.prot)}g · C ${Math.round(zd.carbs)}g · F ${Math.round(zd.fat)}g · ${zd.list.length} meal${zd.list.length !== 1 ? "s" : ""}</div>`
+        : `<div class="tz-macros muted tz-empty">No meals logged</div>`}
+    </div>`;
   });
   bd += `</div>`;
 
@@ -1280,6 +1275,103 @@ function renderItemsCompact(items) {
   return `<div class="tl-items">${parts.join(" &middot; ")}</div>`;
 }
 
+// ── Zone Timeline ─────────────────────────────────────────────────────────────
+// Groups meals into the same 5 time zones as the clock wheel.
+// Replaces the 24-hour slot timeline on Today + History tabs.
+function renderZoneTimeline(container, meals, showEdit, onDelete) {
+  meals.forEach(m => (mealsById[m.id] = m));
+
+  const ZONES = [
+    { name: "Early Morning", emoji: "🌙", start:  0, end:  6, dot: "#5b8fcf" },
+    { name: "Morning",       emoji: "☀️", start:  6, end: 12, dot: "#fbbf24" },
+    { name: "Afternoon",     emoji: "🌤", start: 12, end: 15, dot: "#34d399" },
+    { name: "Evening",       emoji: "🌆", start: 15, end: 18, dot: "#fb923c" },
+    { name: "Night",         emoji: "🌙", start: 18, end: 24, dot: "#a78bfa" },
+  ];
+
+  // Group meals by zone
+  const byZone = ZONES.map(() => []);
+  meals.forEach(m => {
+    const d  = new Date(m.created_at);
+    const h  = d.getHours() + d.getMinutes() / 60;
+    const zi = ZONES.findIndex(z => h >= z.start && h < z.end);
+    if (zi >= 0) byZone[zi].push(m);
+  });
+
+  let html = `<div class="zone-timeline">`;
+
+  ZONES.forEach((z, i) => {
+    const zMeals = byZone[i];
+    const range  = `${String(z.start).padStart(2,"0")}:00–${String(z.end).padStart(2,"0")}:00`;
+    const hasM   = zMeals.length > 0;
+
+    html += `<div class="zt-section${hasM ? "" : " zt-empty"}">
+      <div class="zt-header">
+        <span class="zt-dot" style="background:${z.dot}"></span>
+        <span class="zt-zone-title">${z.emoji} ${z.name}</span>
+        <span class="zt-time-range muted">${range}</span>
+        ${hasM ? `<span class="zt-count muted">${zMeals.length} meal${zMeals.length !== 1 ? "s" : ""}</span>` : ""}
+      </div>`;
+
+    if (hasM) {
+      zMeals.forEach(m => {
+        const t = new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        html += `<div class="tl-card">
+          <div class="tl-card-header">
+            <div class="tl-card-title">${escapeHtml(m.description)}</div>
+            <div class="tl-card-actions">
+              <button class="detail-btn" data-id="${m.id}" title="Show food details">D</button>
+              ${showEdit ? `<button class="edit-btn" data-id="${m.id}">Edit</button>` : ""}
+              <button class="delete-btn" data-id="${m.id}">Delete</button>
+            </div>
+          </div>
+          <div class="tl-card-time">${t} · ${m.source || ""}</div>
+          <div class="tl-detail" hidden>${renderItemsCompact(m.items)}</div>
+          <div class="tl-macros">
+            <div class="tl-chip"><b>${Math.round(m.calories || 0)}</b> kcal</div>
+            <div class="tl-chip">P <b>${round1(m.protein_g)}g</b></div>
+            <div class="tl-chip">C <b>${round1(m.carbs_g)}g</b></div>
+            <div class="tl-chip">F <b>${round1(m.fat_g)}g</b></div>
+          </div>
+        </div>`;
+      });
+    } else {
+      html += `<div class="zt-empty-msg muted">No meals logged</div>`;
+    }
+
+    html += `</div>`;
+  });
+
+  html += `</div>`;
+  container.innerHTML = html;
+
+  // Wire up detail toggle
+  container.querySelectorAll(".detail-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const card   = btn.closest(".tl-card");
+      const detail = card.querySelector(".tl-detail");
+      const open   = !detail.hidden;
+      detail.hidden = open;
+      btn.classList.toggle("detail-btn-on", !open);
+      btn.title = open ? "Show food details" : "Hide food details";
+    });
+  });
+
+  // Wire up delete
+  container.querySelectorAll(".delete-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Delete this meal?")) return;
+      await fetch(`/api/meals/${btn.dataset.id}`, { method: "DELETE", headers: profileHeaders() });
+      if (onDelete) onDelete();
+    });
+  });
+
+  // Wire up edit
+  container.querySelectorAll(".edit-btn").forEach(btn => {
+    btn.addEventListener("click", () => openEditMealModal(mealsById[btn.dataset.id]));
+  });
+}
+
 // --- History tab ---
 const historyDateInput = document.getElementById("history-date");
 historyDateInput.addEventListener("change", loadHistory);
@@ -1297,14 +1389,15 @@ async function loadHistory() {
     const data = await res.json();
     hideDbBanner();
     if (totalsCard) totalsCard.style.display = "";
-    // Show timezone clock for the selected date
+    // Show 4-ring macro circles + timezone clock for the selected date
+    renderCircularTotals(document.getElementById("history-macro-circles"), data.meals, data.total, null);
     renderTimezoneClock(
       document.getElementById("history-totals"),
       data.meals,
       data.total,
       document.getElementById("history-summary")
     );
-    renderDayTimeline(document.getElementById("history-list"), data.meals, false, loadHistory, false);
+    renderZoneTimeline(document.getElementById("history-list"), data.meals, false, loadHistory);
   } catch (err) {
     showDbBanner(loadHistory);
   }
@@ -3105,7 +3198,8 @@ function renderActivitySection(container, historyEntries) {
       if (date === new Date().toISOString().slice(0, 10)) {
         todayExercise = d.entry;
         renderTodayExercise(document.getElementById("today-exercise"), todayExercise);
-        // Just refresh the summary line — don't overwrite the clock
+        // Refresh macro circles with updated exercise-adjusted total; don't overwrite the clock
+        renderCircularTotals(document.getElementById("today-macro-circles"), [], todayTotal || {}, null);
         const _summEl = document.getElementById("today-summary");
         if (_summEl) {
           const _line = daySummaryLine(todayTotal || {});
