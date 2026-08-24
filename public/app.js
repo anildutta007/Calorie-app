@@ -1478,9 +1478,8 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
         const dispVal = key === "calories" ? Math.round(value) : round1(value);
         const labelText = `${dispVal} · ${pctPercent}%`;
 
-        // Rotate text to align with arc direction
-        const rotation = midAngle;
-        labels.push(`<text x="${labelPt.x.toFixed(1)}" y="${labelPt.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="700" fill="#1a1a1a" font-family="inherit" transform="rotate(${rotation} ${labelPt.x.toFixed(1)} ${labelPt.y.toFixed(1)})">${labelText}</text>`);
+        // Keep text horizontal for easy reading (no rotation)
+        labels.push(`<text x="${labelPt.x.toFixed(1)}" y="${labelPt.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="700" fill="#1a1a1a" font-family="inherit">${labelText}</text>`);
 
         angle += pct + GAP;
       }
