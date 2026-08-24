@@ -1453,12 +1453,7 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
     const labels = [];
     let angle = 0;
     const GAP = 2;
-    const LR = 94; // label radius
-
-    function textAnchor(deg) {
-      const cos = Math.cos((deg - 90) * Math.PI / 180);
-      return cos > 0.2 ? "start" : cos < -0.2 ? "end" : "middle";
-    }
+    const LR = 45; // label radius (inside the ring)
 
     zoneData.forEach((zdata, i) => {
       const value = zdata[key] || 0;
@@ -1468,16 +1463,17 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
       if (pct >= 0.15) {
         arcs.push(arcPath(angle, angle + pct, ZONES[i].color));
 
-        // Calculate label position at midpoint of arc
+        // Calculate label position at midpoint of arc, inside the ring
         const midAngle = angle + pct / 2;
         const labelPt = pt(midAngle, LR);
-        const ta = textAnchor(midAngle);
 
         // Format the value based on macro type
         const dispVal = key === "calories" ? Math.round(value) : round1(value);
         const labelText = `${dispVal} · ${pctPercent}%`;
 
-        labels.push(`<text x="${labelPt.x.toFixed(1)}" y="${labelPt.y.toFixed(1)}" text-anchor="${ta}" dominant-baseline="middle" font-size="9" fill="${ZONES[i].color}" font-weight="600" font-family="inherit">${labelText}</text>`);
+        // Rotate text to align with arc direction
+        const rotation = midAngle;
+        labels.push(`<text x="${labelPt.x.toFixed(1)}" y="${labelPt.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-size="8" fill="white" font-weight="600" font-family="inherit" transform="rotate(${rotation} ${labelPt.x.toFixed(1)} ${labelPt.y.toFixed(1)})">${labelText}</text>`);
 
         angle += pct + GAP;
       }
