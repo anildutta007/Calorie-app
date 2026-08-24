@@ -756,7 +756,7 @@ async function loadToday() {
     todayTotal = data.total; // keep a reference for the "complete my day" feature
     updateSuggestCard();
     renderTodayExercise(document.getElementById("today-exercise"), todayExercise);
-    renderZonePanels(document.getElementById("today-list"), data.meals, data.total, true, loadToday);
+    renderZoneMacroView(document.getElementById("today-list"), data.meals, data.total, true, loadToday);
     renderAllFlags(document.getElementById("today-flags"), data.meals);
   } catch (err) {
     showDbBanner(loadToday);
@@ -1370,6 +1370,186 @@ function renderZoneTimeline(container, meals, showEdit, onDelete) {
   });
 }
 
+// ── Combined Zone View (Rings + Meals) ────────────────────────────────────────
+// Renders 4 macro donut rings at top, then meals grouped by zone below (no rings in meal section)
+function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
+  meals.forEach(m => (mealsById[m.id] = m));
+
+  const ZONES = [
+    { name: "Early Morning", emoji: "🌙", start:  0, end:  6, dot: "#5b8fcf" },
+    { name: "Morning",       emoji: "☀️", start:  6, end: 12, dot: "#d97706" },
+    { name: "Afternoon",     emoji: "🌤", start: 12, end: 15, dot: "#059669" },
+    { name: "Evening",       emoji: "🌆", start: 15, end: 18, dot: "#ea580c" },
+    { name: "Night",         emoji: "🌙", start: 18, end: 24, dot: "#7c3aed" },
+  ];
+
+  const MACROS = [
+    { key: "calories",  label: "CALORIES", unit: "kcal", color: "#2f6f4f" },
+    { key: "protein_g", label: "PROTEIN",  unit: "g",    color: "#1d4ed8" },
+    { key: "carbs_g",   label: "CARBS",    unit: "g",    color: "#b45309" },
+    { key: "fat_g",     label: "FAT",      unit: "g",    color: "#6d28d9" },
+  ];
+
+  // Group meals by zone, sum macros per zone
+  const zoneData = ZONES.map(() => ({
+    meals: [], calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0
+  }));
+
+  (meals || []).forEach(m => {
+    const d  = new Date(m.created_at);
+    const h  = d.getHours() + d.getMinutes() / 60;
+    const zi = ZONES.findIndex(z => h >= z.start && h < z.end);
+    if (zi >= 0) {
+      zoneData[zi].meals.push(m);
+      zoneData[zi].calories  += m.calories   || 0;
+      zoneData[zi].protein_g += m.protein_g  || 0;
+      zoneData[zi].carbs_g   += m.carbs_g    || 0;
+      zoneData[zi].fat_g     += m.fat_g      || 0;
+    }
+  });
+
+  // Build 4 SVG donut rings
+  function buildZoneMacroRing(macro) {
+    const { key, label, unit, color } = macro;
+    const VW = 200, VH = 200;
+    const cx = 100, cy = 100;
+    const R = 64;
+    const SW = 15;
+
+    const dayTotal = total[key] || 0;
+    const displayTotal = key === "calories" ? Math.round(dayTotal) : round1(dayTotal);
+    const centerSub = `/ ${key === "calories" ? Math.round(currentTargets?.[key] || 0) : round1(currentTargets?.[key] || 0)} ${unit}`;
+
+    // If no data, show empty ring
+    if (dayTotal === 0) {
+      return `<svg viewBox="0 0 ${VW} ${VH}" overflow="visible" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${color}" stroke-width="${SW}" opacity="0.12"/>
+        <text x="${cx}" y="${cy - 15}" text-anchor="middle" font-size="12" fill="${color}" letter-spacing="0.08em" font-family="inherit">${label}</text>
+        <text x="${cx}" y="${cy + 6}" text-anchor="middle" font-size="22" font-weight="700" fill="${color}" font-family="inherit">0</text>
+        <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="12" style="fill:var(--muted)" font-family="inherit">${centerSub}</text>
+      </svg>`;
+    }
+
+    // Calculate each zone's angle
+    function toRad(deg) {
+      return (deg - 90) * Math.PI / 180;
+    }
+    function pt(deg, radius) {
+      return {
+        x: cx + radius * Math.cos(toRad(deg)),
+        y: cy + radius * Math.sin(toRad(deg))
+      };
+    }
+    function arcPath(a0, a1, stroke) {
+      const d = a1 - a0;
+      if (d < 0.15) return "";
+      const p1 = pt(a0, R);
+      const p2 = pt(a1, R);
+      const large = d > 180 ? 1 : 0;
+      return `<path d="M${p1.x.toFixed(1)},${p1.y.toFixed(1)} A${R},${R} 0 ${large},1 ${p2.x.toFixed(1)},${p2.y.toFixed(1)}" fill="none" stroke="${stroke}" stroke-width="${SW}" stroke-linecap="butt"/>`;
+    }
+
+    const arcs = [];
+    let angle = 0;
+    const GAP = 2;
+
+    zoneData.forEach((zdata, i) => {
+      const value = zdata[key] || 0;
+      const pct = dayTotal > 0 ? (value / dayTotal) * 360 : 0;
+
+      if (pct >= 0.15) {
+        arcs.push(arcPath(angle, angle + pct, ZONES[i].color));
+        angle += pct + GAP;
+      }
+    });
+
+    return `<svg viewBox="0 0 ${VW} ${VH}" overflow="visible" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${color}" stroke-width="${SW}" opacity="0.12"/>
+      ${arcs.join("\n    ")}
+      <text x="${cx}" y="${cy - 15}" text-anchor="middle" font-size="12" fill="${color}" letter-spacing="0.08em" font-family="inherit">${label}</text>
+      <text x="${cx}" y="${cy + 6}" text-anchor="middle" font-size="22" font-weight="700" fill="${color}" font-family="inherit">${displayTotal}</text>
+      <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="12" style="fill:var(--muted)" font-family="inherit">${centerSub}</text>
+    </svg>`;
+  }
+
+  // Build the rings section HTML
+  const ringsHtml = `<div class="circ-grid">${
+    MACROS.map(m => `<div class="circ-cell">${buildZoneMacroRing(m)}</div>`).join("")
+  }</div>`;
+
+  // Build the meals by zone section
+  let mealsHtml = `<div class="zone-timeline">`;
+  ZONES.forEach((z, i) => {
+    const zm = zoneData[i];
+    const range = `${String(z.start).padStart(2,"0")}:00–${String(z.end).padStart(2,"0")}:00`;
+    const hasM = zm.meals.length > 0;
+
+    mealsHtml += `<div class="zt-section${hasM ? "" : " zt-empty"}">
+      <div class="zt-header">
+        <span class="zt-dot" style="background:${z.dot}"></span>
+        <span class="zt-zone-title">${z.emoji} ${z.name}</span>
+        <span class="zt-time-range muted">${range}</span>
+        ${hasM ? `<span class="zt-kcal muted">${Math.round(zm.calories)} kcal</span>` : ""}
+      </div>`;
+
+    if (hasM) {
+      zm.meals.forEach(m => {
+        const t = new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        mealsHtml += `<div class="tl-card">
+          <div class="tl-card-header">
+            <div class="tl-card-title">${escapeHtml(m.description)}</div>
+            <div class="tl-card-actions">
+              <button class="detail-btn" data-id="${m.id}" title="Show food details">D</button>
+              ${showEdit ? `<button class="edit-btn" data-id="${m.id}">Edit</button>` : ""}
+              <button class="delete-btn" data-id="${m.id}">Delete</button>
+            </div>
+          </div>
+          <div class="tl-card-time">${t} · ${m.source || ""}</div>
+          <div class="tl-detail" hidden>${renderItemsCompact(m.items)}</div>
+          <div class="tl-macros">
+            <div class="tl-chip"><b>${Math.round(m.calories || 0)}</b> kcal</div>
+            <div class="tl-chip">P <b>${round1(m.protein_g)}g</b></div>
+            <div class="tl-chip">C <b>${round1(m.carbs_g)}g</b></div>
+            <div class="tl-chip">F <b>${round1(m.fat_g)}g</b></div>
+          </div>
+        </div>`;
+      });
+    } else {
+      mealsHtml += `<div class="zt-empty-msg muted">No meals logged</div>`;
+    }
+
+    mealsHtml += `</div>`;
+  });
+  mealsHtml += `</div>`;
+
+  // Combine both and set HTML
+  container.innerHTML = ringsHtml + mealsHtml;
+
+  // Wire up detail toggle, delete, edit buttons
+  container.querySelectorAll(".detail-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const card   = btn.closest(".tl-card");
+      const detail = card.querySelector(".tl-detail");
+      const open   = !detail.hidden;
+      detail.hidden = open;
+      btn.classList.toggle("detail-btn-on", !open);
+      btn.title = open ? "Show food details" : "Hide food details";
+    });
+  });
+
+  container.querySelectorAll(".delete-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Delete this meal?")) return;
+      await fetch(`/api/meals/${btn.dataset.id}`, { method: "DELETE", headers: profileHeaders() });
+      if (onDelete) onDelete();
+    });
+  });
+
+  container.querySelectorAll(".edit-btn").forEach(btn => {
+    btn.addEventListener("click", () => openEditMealModal(mealsById[btn.dataset.id]));
+  });
+}
+
 // ── Zone Panels ───────────────────────────────────────────────────────────────
 // Main view for Today + History: 5 time-period sections, each showing
 // 4 macro progress rings (for that period's intake) + individual meal cards.
@@ -1515,7 +1695,7 @@ async function loadHistory() {
     if (res.status >= 500) throw new Error(`Server error ${res.status}`);
     const data = await res.json();
     hideDbBanner();
-    renderZonePanels(document.getElementById("history-list"), data.meals, data.total, false, loadHistory);
+    renderZoneMacroView(document.getElementById("history-list"), data.meals, data.total, false, loadHistory);
     renderAllFlags(document.getElementById("history-flags"), data.meals);
   } catch (err) {
     showDbBanner(loadHistory);
