@@ -1460,7 +1460,7 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
     const labels = [];
     let angle = 0;
     const GAP = 2;
-    const LR = 45; // label radius (inside the ring)
+    const LR = 85; // label radius (outside the ring)
 
     zoneData.forEach((zdata, i) => {
       const value = zdata[key] || 0;
