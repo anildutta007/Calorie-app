@@ -1443,6 +1443,13 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
     function arcPath(a0, a1, stroke) {
       const d = a1 - a0;
       if (d < 0.15) return "";
+      // Handle full circle (pct >= ~359 degrees) with a special approach
+      if (d >= 359) {
+        // Draw two semi-circles to create a complete ring
+        const p_top = pt(a0, R);
+        const p_bottom = pt(a0 + 180, R);
+        return `<path d="M${p_top.x.toFixed(1)},${p_top.y.toFixed(1)} A${R},${R} 0 1,1 ${p_bottom.x.toFixed(1)},${p_bottom.y.toFixed(1)} A${R},${R} 0 1,1 ${p_top.x.toFixed(1)},${p_top.y.toFixed(1)}" fill="none" stroke="${stroke}" stroke-width="${SW}" stroke-linecap="butt"/>`;
+      }
       const p1 = pt(a0, R);
       const p2 = pt(a1, R);
       const large = d > 180 ? 1 : 0;
@@ -1461,7 +1468,7 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
       const pctPercent = dayTotal > 0 ? Math.round((value / dayTotal) * 100) : 0;
 
       if (pct >= 0.15) {
-        arcs.push(arcPath(angle, angle + pct, ZONES[i].color));
+        arcs.push(arcPath(angle, angle + pct, ZONES[i].dot));
 
         // Calculate label position at midpoint of arc, inside the ring
         const midAngle = angle + pct / 2;
