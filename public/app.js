@@ -1480,7 +1480,7 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
 
         // Rotate text to align with arc direction
         const rotation = midAngle;
-        labels.push(`<text x="${labelPt.x.toFixed(1)}" y="${labelPt.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-size="8" fill="white" font-weight="600" font-family="inherit" transform="rotate(${rotation} ${labelPt.x.toFixed(1)} ${labelPt.y.toFixed(1)})">${labelText}</text>`);
+        labels.push(`<text x="${labelPt.x.toFixed(1)}" y="${labelPt.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="700" fill="white" font-family="inherit" stroke="rgba(0,0,0,0.3)" stroke-width="0.5" transform="rotate(${rotation} ${labelPt.x.toFixed(1)} ${labelPt.y.toFixed(1)})">${labelText}</text>`);
 
         angle += pct + GAP;
       }
