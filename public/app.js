@@ -1450,15 +1450,35 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
     }
 
     const arcs = [];
+    const labels = [];
     let angle = 0;
     const GAP = 2;
+    const LR = 94; // label radius
+
+    function textAnchor(deg) {
+      const cos = Math.cos((deg - 90) * Math.PI / 180);
+      return cos > 0.2 ? "start" : cos < -0.2 ? "end" : "middle";
+    }
 
     zoneData.forEach((zdata, i) => {
       const value = zdata[key] || 0;
       const pct = dayTotal > 0 ? (value / dayTotal) * 360 : 0;
+      const pctPercent = dayTotal > 0 ? Math.round((value / dayTotal) * 100) : 0;
 
       if (pct >= 0.15) {
         arcs.push(arcPath(angle, angle + pct, ZONES[i].color));
+
+        // Calculate label position at midpoint of arc
+        const midAngle = angle + pct / 2;
+        const labelPt = pt(midAngle, LR);
+        const ta = textAnchor(midAngle);
+
+        // Format the value based on macro type
+        const dispVal = key === "calories" ? Math.round(value) : round1(value);
+        const labelText = `${dispVal} · ${pctPercent}%`;
+
+        labels.push(`<text x="${labelPt.x.toFixed(1)}" y="${labelPt.y.toFixed(1)}" text-anchor="${ta}" dominant-baseline="middle" font-size="9" fill="${ZONES[i].color}" font-weight="600" font-family="inherit">${labelText}</text>`);
+
         angle += pct + GAP;
       }
     });
@@ -1466,6 +1486,7 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
     return `<svg viewBox="0 0 ${VW} ${VH}" overflow="visible" xmlns="http://www.w3.org/2000/svg">
       <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${color}" stroke-width="${SW}" opacity="0.12"/>
       ${arcs.join("\n    ")}
+      ${labels.join("\n    ")}
       <text x="${cx}" y="${cy - 15}" text-anchor="middle" font-size="12" fill="${color}" letter-spacing="0.08em" font-family="inherit">${label}</text>
       <text x="${cx}" y="${cy + 6}" text-anchor="middle" font-size="22" font-weight="700" fill="${color}" font-family="inherit">${displayTotal}</text>
       <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="12" style="fill:var(--muted)" font-family="inherit">${centerSub}</text>
