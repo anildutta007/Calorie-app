@@ -101,8 +101,14 @@
         <textarea id="voice-text" placeholder="Describe what you ate — or use Speak / Snap above. Add any notes here too."></textarea>
         <img id="photo-preview" class="photo-preview" style="display:none" />
         <div class="meal-time-row">
-          <label for="log-meal-time">🕐 Time eaten</label>
-          <input type="time" id="log-meal-time" />
+          <div style="flex: 1;">
+            <label for="log-meal-date">📅 Date</label>
+            <input type="date" id="log-meal-date" />
+          </div>
+          <div style="flex: 1;">
+            <label for="log-meal-time">🕐 Time eaten</label>
+            <input type="time" id="log-meal-time" />
+          </div>
         </div>
         <button id="analyze-btn" class="primary-btn">Analyze &amp; Log</button>
       </div>

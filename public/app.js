@@ -378,11 +378,40 @@ function mealTimeIso(inputEl) {
   return d.toISOString();
 }
 
+// Combine date and time inputs into ISO string (for logging meals on previous days)
+function mealDateTimeIso(dateInput, timeInput) {
+  const dateVal = dateInput ? dateInput.value : "";
+  const timeVal = timeInput ? timeInput.value : "";
+
+  // If no date, use today
+  const dateStr = dateVal || new Date().toISOString().split('T')[0];
+
+  // If no time, use current time
+  if (!timeVal) {
+    return new Date().toISOString();
+  }
+
+  // Parse date (YYYY-MM-DD) and time (HH:mm)
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const [h, m] = timeVal.split(":").map(Number);
+
+  // Create date at specified date/time in local timezone
+  const d = new Date(year, month - 1, day, h, m, 0, 0);
+  return d.toISOString();
+}
+
+const logMealDateInput  = document.getElementById("log-meal-date");
 const logMealTimeInput  = document.getElementById("log-meal-time");
 const editMealTimeInput = document.getElementById("edit-meal-time");
 
-// Initialise log time input to "now"
+// Initialise log date and time inputs to today and now
 function resetLogTimes() {
+  const now = new Date();
+  // Set date to today (YYYY-MM-DD format)
+  if (logMealDateInput) {
+    logMealDateInput.value = now.toISOString().split('T')[0];
+  }
+  // Set time to current time (HH:mm format)
   const t = nowTimeStr();
   if (logMealTimeInput) logMealTimeInput.value = t;
 }
@@ -437,7 +466,7 @@ analyzeBtn.addEventListener("click", async () => {
       const formData = new FormData();
       formData.append("photo", uploadFile, "photo.jpg");
       formData.append("caption", voiceText.value.trim());
-      formData.append("meal_time_iso", mealTimeIso(logMealTimeInput));
+      formData.append("meal_time_iso", mealDateTimeIso(logMealDateInput, logMealTimeInput));
       const res = await fetch("/api/meals/photo", { method: "POST", headers: profileHeaders(), body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to analyze.");
@@ -461,7 +490,7 @@ analyzeBtn.addEventListener("click", async () => {
       const res = await fetch("/api/meals/text", {
         method: "POST",
         headers: profileHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ text, meal_time_iso: mealTimeIso(logMealTimeInput) }),
+        body: JSON.stringify({ text, meal_time_iso: mealDateTimeIso(logMealDateInput, logMealTimeInput) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to analyze.");
