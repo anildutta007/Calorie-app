@@ -1747,7 +1747,7 @@ async function loadHistory() {
     if (res.status >= 500) throw new Error(`Server error ${res.status}`);
     const data = await res.json();
     hideDbBanner();
-    renderZoneMacroView(document.getElementById("history-list"), data.meals, data.total, false, loadHistory);
+    renderZoneMacroView(document.getElementById("history-list"), data.meals, data.total, true, loadHistory);
     renderAllFlags(document.getElementById("history-flags"), data.meals);
   } catch (err) {
     showDbBanner(loadHistory);
