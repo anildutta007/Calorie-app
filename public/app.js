@@ -1738,28 +1738,6 @@ function renderZonePanels(container, meals, total, showEdit, onDelete) {
 const historyDateInput = document.getElementById("history-date");
 historyDateInput.addEventListener("change", loadHistory);
 
-// Log meal for the selected history date
-const historyLogMealBtn = document.getElementById("history-log-meal-btn");
-historyLogMealBtn.addEventListener("click", () => {
-  const selectedDate = historyDateInput.value;
-  if (!selectedDate) {
-    alert("Please select a date first");
-    return;
-  }
-
-  // Set the Log Meal date picker to the selected history date
-  logMealDateInput.value = selectedDate;
-
-  // Switch to Log Meal tab
-  activateTab("log");
-
-  // Focus on meal description field and clear previous content
-  setTimeout(() => {
-    voiceText.focus();
-    voiceText.value = "";
-  }, 100);
-});
-
 async function loadHistory() {
   const today = new Date().toISOString().slice(0, 10);
   if (!historyDateInput.value) historyDateInput.value = today;
