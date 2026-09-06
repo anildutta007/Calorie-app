@@ -687,23 +687,22 @@ app.post("/api/meals/suggest-completion/email", async (req, res) => {
 app.get("/api/meals/export", async (req, res) => {
   try {
     const { start, end, format } = req.query;
-    const profileId = req.headers["x-profile-id"];
+    const profileId = req.profileId;
     if (!profileId) return res.status(401).json({ error: "Unauthorized" });
 
     if (!start || !end) return res.status(400).json({ error: "Start and end dates required" });
 
-    const startDate = new Date(start);
+    // Fetch meals for each date in the range
+    const meals = [];
+    const currentDate = new Date(start);
     const endDate = new Date(end);
-    endDate.setHours(23, 59, 59, 999);
 
-    const meals = await db
-      .selectFrom("meals")
-      .selectAll()
-      .where("profile_id", "=", Number(profileId))
-      .where("created_at", ">=", startDate.toISOString())
-      .where("created_at", "<=", endDate.toISOString())
-      .orderBy("created_at", "desc")
-      .execute();
+    while (currentDate <= endDate) {
+      const dateStr = currentDate.toISOString().split("T")[0];
+      const dayMeals = await listMealsForDate(dateStr, profileId);
+      meals.push(...dayMeals);
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
 
     if (format === "csv") {
       // Generate CSV
@@ -731,25 +730,24 @@ app.get("/api/meals/export", async (req, res) => {
 app.post("/api/meals/export-email", async (req, res) => {
   try {
     const { startDate, endDate, email } = req.body;
-    const profileId = req.headers["x-profile-id"];
+    const profileId = req.profileId;
     if (!profileId) return res.status(401).json({ error: "Unauthorized" });
 
     if (!startDate || !endDate || !email) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const start = new Date(startDate);
+    // Fetch meals for each date in the range
+    const meals = [];
+    const currentDate = new Date(startDate);
     const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
 
-    const meals = await db
-      .selectFrom("meals")
-      .selectAll()
-      .where("profile_id", "=", Number(profileId))
-      .where("created_at", ">=", start.toISOString())
-      .where("created_at", "<=", end.toISOString())
-      .orderBy("created_at", "desc")
-      .execute();
+    while (currentDate <= end) {
+      const dateStr = currentDate.toISOString().split("T")[0];
+      const dayMeals = await listMealsForDate(dateStr, profileId);
+      meals.push(...dayMeals);
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
 
     // Generate CSV content
     let csv = "Date,Time,Description,Calories,Protein (g),Carbs (g),Fat (g),Fiber (g),Sugar (g),Sodium (mg)\n";
@@ -769,40 +767,35 @@ app.post("/api/meals/export-email", async (req, res) => {
     // Add summary row
     csv += `\nTOTAL,,,${totalCalories},${totalProtein.toFixed(1)},${totalCarbs.toFixed(1)},${totalFat.toFixed(1)},,\n`;
 
-    // Send email with attachment
+    // Send email with attachment using Resend
+    const resend = new Resend(process.env.RESEND_API_KEY);
     const mealCount = meals.length;
     const dateRange = `${startDate} to ${endDate}`;
 
-    const emailRes = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: "Dutta Food Planner <noreply@resend.dev>",
-        to: email,
-        subject: `Your Meal Export (${dateRange})`,
-        html: `
-          <h2>Meal Export Report</h2>
-          <p>Period: <strong>${dateRange}</strong></p>
-          <p>Total meals: <strong>${mealCount}</strong></p>
-          <h3>Summary</h3>
-          <ul>
-            <li>Total Calories: ${totalCalories.toFixed(0)}</li>
-            <li>Total Protein: ${totalProtein.toFixed(1)}g</li>
-            <li>Total Carbs: ${totalCarbs.toFixed(1)}g</li>
-            <li>Total Fat: ${totalFat.toFixed(1)}g</li>
-          </ul>
-          <p>A detailed CSV file is attached below.</p>
-        `,
-        attachments: [
-          {
-            filename: `meals_${startDate}_to_${endDate}.csv`,
-            content: Buffer.from(csv).toString("base64")
-          }
-        ]
-      })
+    await resend.emails.send({
+      from: "Dutta Food Planner <noreply@resend.dev>",
+      to: email,
+      subject: `Your Meal Export (${dateRange})`,
+      html: `
+        <h2>Meal Export Report</h2>
+        <p>Period: <strong>${dateRange}</strong></p>
+        <p>Total meals: <strong>${mealCount}</strong></p>
+        <h3>Summary</h3>
+        <ul>
+          <li>Total Calories: ${totalCalories.toFixed(0)}</li>
+          <li>Total Protein: ${totalProtein.toFixed(1)}g</li>
+          <li>Total Carbs: ${totalCarbs.toFixed(1)}g</li>
+          <li>Total Fat: ${totalFat.toFixed(1)}g</li>
+        </ul>
+        <p>A detailed CSV file is attached below.</p>
+      `,
+      attachments: [
+        {
+          filename: `meals_${startDate}_to_${endDate}.csv`,
+          content: Buffer.from(csv).toString("base64")
+        }
+      ]
     });
-
-    if (!emailRes.ok) throw new Error("Failed to send email");
 
     res.json({ ok: true, message: "Email sent successfully" });
   } catch (err) {
