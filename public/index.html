@@ -84,7 +84,7 @@
       <button class="top-tab-btn" data-tab="history">📊 History</button>
       <button class="top-tab-btn" data-tab="progress">📈 Progress</button>
       <button class="top-tab-btn" data-tab="goal">🎯 Goals</button>
-      <button class="top-tab-btn" data-tab="plan">🥗 Meal Plan</button>
+      <button class="top-tab-btn" data-tab="export">📥 Export</button>
     </nav>
 
     <!-- LOG TAB -->
@@ -147,6 +147,37 @@
       <div id="history-list" class="meal-list"></div>
       <!-- Portion warnings at end of page -->
       <div id="history-flags"></div>
+    </section>
+
+    <!-- EXPORT TAB -->
+    <section id="tab-export" class="tab">
+      <div class="card">
+        <h2>📥 Export Meals</h2>
+        <p style="margin-top:0; font-size:0.9rem; color:var(--muted)">Download or email your meal data for a date range</p>
+
+        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+          <div style="flex: 1;">
+            <label for="export-start-date">Start Date</label>
+            <input type="date" id="export-start-date" />
+          </div>
+          <div style="flex: 1;">
+            <label for="export-end-date">End Date</label>
+            <input type="date" id="export-end-date" />
+          </div>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <label for="export-email">Email Address (for sending report)</label>
+          <input type="email" id="export-email" placeholder="your@email.com" />
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button id="export-download-btn" class="primary-btn" style="flex: 1;">⬇️ Download CSV</button>
+          <button id="export-email-btn" class="secondary-btn" style="flex: 1;">✉️ Send Email</button>
+        </div>
+
+        <div id="export-status" style="margin-top:12px; padding:8px; border-radius:4px; display:none; font-size:0.9rem;"></div>
+      </div>
     </section>
 
     <!-- MEAL PLAN TAB -->

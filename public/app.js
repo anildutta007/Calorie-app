@@ -1754,6 +1754,109 @@ async function loadHistory() {
   }
 }
 
+// ── Export Meals (Export tab) ────────────────────────────────────────────────
+const exportStartDateInput = document.getElementById("export-start-date");
+const exportEndDateInput = document.getElementById("export-end-date");
+const exportEmailInput = document.getElementById("export-email");
+const exportDownloadBtn = document.getElementById("export-download-btn");
+const exportEmailBtn = document.getElementById("export-email-btn");
+const exportStatus = document.getElementById("export-status");
+
+// Initialize date fields to last 30 days
+function initExportDates() {
+  const today = new Date();
+  const thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setDate(today.getDate() - 30);
+
+  exportEndDateInput.value = today.toISOString().split('T')[0];
+  exportStartDateInput.value = thirtyDaysAgo.toISOString().split('T')[0];
+}
+initExportDates();
+
+// Download CSV
+exportDownloadBtn.addEventListener("click", async () => {
+  const startDate = exportStartDateInput.value;
+  const endDate = exportEndDateInput.value;
+
+  if (!startDate || !endDate) {
+    showExportStatus("Please select both start and end dates", "error");
+    return;
+  }
+
+  try {
+    setBusy(exportDownloadBtn, true, "Generating CSV...");
+    const res = await fetch(`/api/meals/export?start=${startDate}&end=${endDate}&format=csv`, {
+      headers: profileHeaders()
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Failed to generate CSV");
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `meals_${startDate}_to_${endDate}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showExportStatus("✓ CSV downloaded successfully!", "success");
+  } catch (err) {
+    showExportStatus(`Error: ${err.message}`, "error");
+  } finally {
+    setBusy(exportDownloadBtn, false, "⬇️ Download CSV");
+  }
+});
+
+// Send via Email
+exportEmailBtn.addEventListener("click", async () => {
+  const startDate = exportStartDateInput.value;
+  const endDate = exportEndDateInput.value;
+  const email = exportEmailInput.value.trim();
+
+  if (!startDate || !endDate) {
+    showExportStatus("Please select both start and end dates", "error");
+    return;
+  }
+
+  if (!email) {
+    showExportStatus("Please enter an email address", "error");
+    return;
+  }
+
+  try {
+    setBusy(exportEmailBtn, true, "Sending...");
+    const res = await fetch("/api/meals/export-email", {
+      method: "POST",
+      headers: profileHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ startDate, endDate, email })
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Failed to send email");
+    }
+
+    showExportStatus("✓ Email sent successfully!", "success");
+  } catch (err) {
+    showExportStatus(`Error: ${err.message}`, "error");
+  } finally {
+    setBusy(exportEmailBtn, false, "✉️ Send Email");
+  }
+});
+
+function showExportStatus(message, type) {
+  exportStatus.textContent = message;
+  exportStatus.style.display = "block";
+  exportStatus.style.backgroundColor = type === "success" ? "rgba(34, 197, 94, 0.1)" : "rgba(239, 68, 68, 0.1)";
+  exportStatus.style.color = type === "success" ? "#16a34a" : "#dc2626";
+  exportStatus.style.borderLeft = `3px solid ${type === "success" ? "#16a34a" : "#dc2626"}`;
+}
+
 // ── 7-day progress: 2×2 bar charts (Progress tab) ────────────────────────────
 // Called directly from renderProgress() with the data it already fetched.
 // Layout: 2×2 grid — one SVG bar chart per macro (Calories, Protein, Carbs, Fat).

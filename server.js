@@ -683,6 +683,134 @@ app.post("/api/meals/suggest-completion/email", async (req, res) => {
   }
 });
 
+// --- Export meals (CSV download) ---
+app.get("/api/meals/export", async (req, res) => {
+  try {
+    const { start, end, format } = req.query;
+    const profileId = req.headers["x-profile-id"];
+    if (!profileId) return res.status(401).json({ error: "Unauthorized" });
+
+    if (!start || !end) return res.status(400).json({ error: "Start and end dates required" });
+
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    endDate.setHours(23, 59, 59, 999);
+
+    const meals = await db
+      .selectFrom("meals")
+      .selectAll()
+      .where("profile_id", "=", Number(profileId))
+      .where("created_at", ">=", startDate.toISOString())
+      .where("created_at", "<=", endDate.toISOString())
+      .orderBy("created_at", "desc")
+      .execute();
+
+    if (format === "csv") {
+      // Generate CSV
+      let csv = "Date,Time,Description,Calories,Protein (g),Carbs (g),Fat (g),Fiber (g),Sugar (g),Sodium (mg)\n";
+      meals.forEach(meal => {
+        const date = new Date(meal.created_at);
+        const dateStr = date.toLocaleDateString();
+        const timeStr = date.toLocaleTimeString();
+        csv += `"${dateStr}","${timeStr}","${meal.description}",${meal.calories},${meal.protein_g},${meal.carbs_g},${meal.fat_g},${meal.fiber_g},${meal.sugar_g},${meal.sodium_mg}\n`;
+      });
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="meals_${start}_to_${end}.csv"`);
+      res.send(csv);
+    } else {
+      res.json(meals);
+    }
+  } catch (err) {
+    console.error("export error:", err);
+    res.status(500).json({ error: err.message || "Failed to export meals" });
+  }
+});
+
+// --- Export meals via email ---
+app.post("/api/meals/export-email", async (req, res) => {
+  try {
+    const { startDate, endDate, email } = req.body;
+    const profileId = req.headers["x-profile-id"];
+    if (!profileId) return res.status(401).json({ error: "Unauthorized" });
+
+    if (!startDate || !endDate || !email) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    const meals = await db
+      .selectFrom("meals")
+      .selectAll()
+      .where("profile_id", "=", Number(profileId))
+      .where("created_at", ">=", start.toISOString())
+      .where("created_at", "<=", end.toISOString())
+      .orderBy("created_at", "desc")
+      .execute();
+
+    // Generate CSV content
+    let csv = "Date,Time,Description,Calories,Protein (g),Carbs (g),Fat (g),Fiber (g),Sugar (g),Sodium (mg)\n";
+    let totalCalories = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0;
+
+    meals.forEach(meal => {
+      const date = new Date(meal.created_at);
+      const dateStr = date.toLocaleDateString();
+      const timeStr = date.toLocaleTimeString();
+      csv += `"${dateStr}","${timeStr}","${meal.description}",${meal.calories},${meal.protein_g},${meal.carbs_g},${meal.fat_g},${meal.fiber_g},${meal.sugar_g},${meal.sodium_mg}\n`;
+      totalCalories += meal.calories;
+      totalProtein += meal.protein_g;
+      totalCarbs += meal.carbs_g;
+      totalFat += meal.fat_g;
+    });
+
+    // Add summary row
+    csv += `\nTOTAL,,,${totalCalories},${totalProtein.toFixed(1)},${totalCarbs.toFixed(1)},${totalFat.toFixed(1)},,\n`;
+
+    // Send email with attachment
+    const mealCount = meals.length;
+    const dateRange = `${startDate} to ${endDate}`;
+
+    const emailRes = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: "Dutta Food Planner <noreply@resend.dev>",
+        to: email,
+        subject: `Your Meal Export (${dateRange})`,
+        html: `
+          <h2>Meal Export Report</h2>
+          <p>Period: <strong>${dateRange}</strong></p>
+          <p>Total meals: <strong>${mealCount}</strong></p>
+          <h3>Summary</h3>
+          <ul>
+            <li>Total Calories: ${totalCalories.toFixed(0)}</li>
+            <li>Total Protein: ${totalProtein.toFixed(1)}g</li>
+            <li>Total Carbs: ${totalCarbs.toFixed(1)}g</li>
+            <li>Total Fat: ${totalFat.toFixed(1)}g</li>
+          </ul>
+          <p>A detailed CSV file is attached below.</p>
+        `,
+        attachments: [
+          {
+            filename: `meals_${startDate}_to_${endDate}.csv`,
+            content: Buffer.from(csv).toString("base64")
+          }
+        ]
+      })
+    });
+
+    if (!emailRes.ok) throw new Error("Failed to send email");
+
+    res.json({ ok: true, message: "Email sent successfully" });
+  } catch (err) {
+    console.error("export-email error:", err);
+    res.status(500).json({ error: err.message || "Failed to send email" });
+  }
+});
+
 // --- Weight log routes (require X-Profile-Id) ---
 
 // POST /api/profile/weight — record a weigh-in
