@@ -189,6 +189,7 @@ function enterApp() {
   resetLogTimes();
   loadAppVersion();
   loadDailyGreeting();
+  loadRecurringMeals();
   Promise.all([loadBio(), loadTargets()]).then(loadToday);
 }
 
@@ -365,7 +366,7 @@ const recurringSuggestions = document.getElementById("recurring-suggestions");
 let recurringData = [];
 let selectedIndex = -1;
 
-// Fetch recurring meals on page load
+// Fetch recurring meals
 async function loadRecurringMeals() {
   try {
     const res = await fetch("/api/meals/recurring", { headers: profileHeaders() });
@@ -377,7 +378,6 @@ async function loadRecurringMeals() {
     console.error("Failed to load recurring meals:", err);
   }
 }
-loadRecurringMeals();
 
 // Autocomplete on input
 let autocompleteTimeout;
