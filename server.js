@@ -1316,7 +1316,7 @@ app.post("/api/admin/backfill-extended-macros", async (req, res) => {
   try {
     console.log("[backfill] Starting extended macros backfill...");
 
-    // Find all meals with fiber_g = 0 (means extended macros not calculated)
+    // Find all meals with fiber_g = 0 (means extended macros totals not calculated)
     const mealsNeeding = await getMealsNeedingBackfill();
 
     if (!mealsNeeding || mealsNeeding.length === 0) {
@@ -1344,26 +1344,21 @@ app.post("/api/admin/backfill-extended-macros", async (req, res) => {
           continue;
         }
 
-        console.log(`[backfill] Estimating macros for meal ${meal.id} (${items.length} item(s))...`);
+        // Parse items_json and sum the extended macros that should already be there
+        const fiber_g = items.reduce((sum, it) => sum + (it.fiber_g || 0), 0);
+        const sugar_g = items.reduce((sum, it) => sum + (it.sugar_g || 0), 0);
+        const sodium_mg = items.reduce((sum, it) => sum + (it.sodium_mg || 0), 0);
+        const saturated_fat_g = items.reduce((sum, it) => sum + (it.saturated_fat_g || 0), 0);
 
-        // Use AI to estimate extended macros
-        const estimatedItems = await estimateItemMacros(items);
-
-        // Calculate totals from estimated items
-        const fiber_g = estimatedItems.reduce((sum, it) => sum + (it.fiber_g || 0), 0);
-        const sugar_g = estimatedItems.reduce((sum, it) => sum + (it.sugar_g || 0), 0);
-        const sodium_mg = estimatedItems.reduce((sum, it) => sum + (it.sodium_mg || 0), 0);
-        const saturated_fat_g = estimatedItems.reduce((sum, it) => sum + (it.saturated_fat_g || 0), 0);
+        // Skip if no extended macros found (old meals without AI analysis)
+        if (fiber_g === 0 && sugar_g === 0 && sodium_mg === 0 && saturated_fat_g === 0) {
+          console.log(`[backfill] Meal ${meal.id}: no extended macros in items, skipping (needs re-analysis)`);
+          skipped++;
+          continue;
+        }
 
         // Update the meal
-        await updateMealExtendedMacros(
-          meal.id,
-          fiber_g,
-          sugar_g,
-          sodium_mg,
-          saturated_fat_g,
-          JSON.stringify(estimatedItems)
-        );
+        await updateMealExtendedMacros(meal.id, fiber_g, sugar_g, sodium_mg, saturated_fat_g);
 
         console.log(`[backfill] ✅ Meal ${meal.id}: fiber=${fiber_g.toFixed(1)}g, sugar=${sugar_g.toFixed(1)}g, sodium=${sodium_mg.toFixed(0)}mg, sat fat=${saturated_fat_g.toFixed(1)}g`);
         updated++;

@@ -619,7 +619,7 @@ async function deleteProfile(profileId) {
 async function getMealsNeedingBackfill() {
   await init();
   return await sql`
-    SELECT id, items_json, calories, protein_g, carbs_g, fat_g, created_at
+    SELECT id, items_json
     FROM meals
     WHERE fiber_g = 0 AND items_json IS NOT NULL AND items_json != ''
     ORDER BY created_at DESC
@@ -627,12 +627,11 @@ async function getMealsNeedingBackfill() {
 }
 
 // Update a meal's extended macros
-async function updateMealExtendedMacros(mealId, fiber_g, sugar_g, sodium_mg, saturated_fat_g, items_json) {
+async function updateMealExtendedMacros(mealId, fiber_g, sugar_g, sodium_mg, saturated_fat_g) {
   await init();
   return await sql`
     UPDATE meals
-    SET items_json = ${items_json},
-        fiber_g = ${fiber_g},
+    SET fiber_g = ${fiber_g},
         sugar_g = ${sugar_g},
         sodium_mg = ${sodium_mg},
         saturated_fat_g = ${saturated_fat_g}
