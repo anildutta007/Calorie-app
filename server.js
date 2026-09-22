@@ -1309,6 +1309,88 @@ app.post("/api/admin/cleanup-inactive-profiles", async (req, res) => {
   }
 });
 
+// Backfill extended macros (fiber, sugar, sodium, saturated fat) for old meals
+app.post("/api/admin/backfill-extended-macros", async (req, res) => {
+  try {
+    console.log("[backfill] Starting extended macros backfill...");
+
+    // Find all meals with fiber_g = 0 (means extended macros not calculated)
+    const mealsNeeding = await sql`
+      SELECT id, items_json, calories, protein_g, carbs_g, fat_g, created_at
+      FROM meals
+      WHERE fiber_g = 0 AND items_json IS NOT NULL AND items_json != ''
+      ORDER BY created_at DESC
+    `;
+
+    if (!mealsNeeding || mealsNeeding.length === 0) {
+      return res.json({
+        message: "No meals need backfill",
+        updated: 0,
+        skipped: 0,
+        errors: 0
+      });
+    }
+
+    console.log(`[backfill] Found ${mealsNeeding.length} meal(s) needing extended macros`);
+
+    let updated = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    for (const meal of mealsNeeding) {
+      try {
+        const items = JSON.parse(meal.items_json || "[]");
+
+        if (!items || items.length === 0) {
+          console.log(`[backfill] Meal ${meal.id}: no items, skipping`);
+          skipped++;
+          continue;
+        }
+
+        console.log(`[backfill] Estimating macros for meal ${meal.id} (${items.length} item(s))...`);
+
+        // Use AI to estimate extended macros
+        const estimatedItems = await estimateItemMacros(items);
+
+        // Calculate totals from estimated items
+        const fiber_g = estimatedItems.reduce((sum, it) => sum + (it.fiber_g || 0), 0);
+        const sugar_g = estimatedItems.reduce((sum, it) => sum + (it.sugar_g || 0), 0);
+        const sodium_mg = estimatedItems.reduce((sum, it) => sum + (it.sodium_mg || 0), 0);
+        const saturated_fat_g = estimatedItems.reduce((sum, it) => sum + (it.saturated_fat_g || 0), 0);
+
+        // Update the meal
+        await sql`
+          UPDATE meals
+          SET items_json = ${JSON.stringify(estimatedItems)},
+              fiber_g = ${fiber_g},
+              sugar_g = ${sugar_g},
+              sodium_mg = ${sodium_mg},
+              saturated_fat_g = ${saturated_fat_g}
+          WHERE id = ${meal.id}
+        `;
+
+        console.log(`[backfill] ✅ Meal ${meal.id}: fiber=${fiber_g.toFixed(1)}g, sugar=${sugar_g.toFixed(1)}g, sodium=${sodium_mg.toFixed(0)}mg, sat fat=${saturated_fat_g.toFixed(1)}g`);
+        updated++;
+      } catch (err) {
+        console.error(`[backfill] ❌ Meal ${meal.id}: ${err.message}`);
+        errors++;
+      }
+    }
+
+    res.json({
+      message: "Backfill complete",
+      updated,
+      skipped,
+      errors,
+      total: mealsNeeding.length
+    });
+
+  } catch (err) {
+    console.error("[backfill] Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // When run directly (npm start, or Render), start a normal listening server.
 // When imported by Vercel's serverless runtime, just export the app instead.
 if (require.main === module) {
