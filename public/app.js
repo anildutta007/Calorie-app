@@ -1494,6 +1494,12 @@ function renderZoneTimeline(container, meals, showEdit, onDelete) {
             <div class="tl-chip">C <b>${round1(m.carbs_g)}g</b></div>
             <div class="tl-chip">F <b>${round1(m.fat_g)}g</b></div>
           </div>
+          <div class="tl-macros" style="margin-top:6px">
+            <div class="tl-chip" style="${m.fiber_g > (currentTargets?.fiber_g_limit || 35) ? 'color: #dc2626; font-weight: 600;' : ''}">Fiber <b>${round1(m.fiber_g)}g</b></div>
+            <div class="tl-chip" style="${m.sugar_g > (currentTargets?.sugar_g_limit || 50) ? 'color: #dc2626; font-weight: 600;' : ''}">Sugar <b>${round1(m.sugar_g)}g</b></div>
+            <div class="tl-chip" style="${m.sodium_mg > (currentTargets?.sodium_mg_limit || 2300) ? 'color: #dc2626; font-weight: 600;' : ''}">Na <b>${Math.round(m.sodium_mg)}mg</b></div>
+            <div class="tl-chip" style="${m.saturated_fat_g > (currentTargets?.saturated_fat_g_limit || 20) ? 'color: #dc2626; font-weight: 600;' : ''}">SatFat <b>${round1(m.saturated_fat_g)}g</b></div>
+          </div>
         </div>`;
       });
     } else {
@@ -1698,6 +1704,12 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
             <div class="tl-chip">C <b>${round1(m.carbs_g)}g</b></div>
             <div class="tl-chip">F <b>${round1(m.fat_g)}g</b></div>
           </div>
+          <div class="tl-macros" style="margin-top:6px">
+            <div class="tl-chip" style="${m.fiber_g > (currentTargets?.fiber_g_limit || 35) ? 'color: #dc2626; font-weight: 600;' : ''}">Fiber <b>${round1(m.fiber_g)}g</b></div>
+            <div class="tl-chip" style="${m.sugar_g > (currentTargets?.sugar_g_limit || 50) ? 'color: #dc2626; font-weight: 600;' : ''}">Sugar <b>${round1(m.sugar_g)}g</b></div>
+            <div class="tl-chip" style="${m.sodium_mg > (currentTargets?.sodium_mg_limit || 2300) ? 'color: #dc2626; font-weight: 600;' : ''}">Na <b>${Math.round(m.sodium_mg)}mg</b></div>
+            <div class="tl-chip" style="${m.saturated_fat_g > (currentTargets?.saturated_fat_g_limit || 20) ? 'color: #dc2626; font-weight: 600;' : ''}">SatFat <b>${round1(m.saturated_fat_g)}g</b></div>
+          </div>
         </div>`;
       });
     } else {
@@ -1817,6 +1829,12 @@ function renderZonePanels(container, meals, total, showEdit, onDelete) {
             <div class="tl-chip">P <b>${round1(m.protein_g)}g</b></div>
             <div class="tl-chip">C <b>${round1(m.carbs_g)}g</b></div>
             <div class="tl-chip">F <b>${round1(m.fat_g)}g</b></div>
+          </div>
+          <div class="tl-macros" style="margin-top:6px">
+            <div class="tl-chip" style="${m.fiber_g > (currentTargets?.fiber_g_limit || 35) ? 'color: #dc2626; font-weight: 600;' : ''}">Fiber <b>${round1(m.fiber_g)}g</b></div>
+            <div class="tl-chip" style="${m.sugar_g > (currentTargets?.sugar_g_limit || 50) ? 'color: #dc2626; font-weight: 600;' : ''}">Sugar <b>${round1(m.sugar_g)}g</b></div>
+            <div class="tl-chip" style="${m.sodium_mg > (currentTargets?.sodium_mg_limit || 2300) ? 'color: #dc2626; font-weight: 600;' : ''}">Na <b>${Math.round(m.sodium_mg)}mg</b></div>
+            <div class="tl-chip" style="${m.saturated_fat_g > (currentTargets?.saturated_fat_g_limit || 20) ? 'color: #dc2626; font-weight: 600;' : ''}">SatFat <b>${round1(m.saturated_fat_g)}g</b></div>
           </div>
         </div>`;
       });
