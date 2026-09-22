@@ -34,6 +34,8 @@ const {
   getExerciseRecent,
   findInactiveProfiles,
   deleteProfile,
+  getMealsNeedingBackfill,
+  updateMealExtendedMacros,
 } = require("./db");
 const { analyzeMealText, analyzeMealPhoto, estimateItemMacros, generateDailyQuote, generateProgressSummary } = require("./nutrition");
 const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mealplan");
@@ -1315,12 +1317,7 @@ app.post("/api/admin/backfill-extended-macros", async (req, res) => {
     console.log("[backfill] Starting extended macros backfill...");
 
     // Find all meals with fiber_g = 0 (means extended macros not calculated)
-    const mealsNeeding = await sql`
-      SELECT id, items_json, calories, protein_g, carbs_g, fat_g, created_at
-      FROM meals
-      WHERE fiber_g = 0 AND items_json IS NOT NULL AND items_json != ''
-      ORDER BY created_at DESC
-    `;
+    const mealsNeeding = await getMealsNeedingBackfill();
 
     if (!mealsNeeding || mealsNeeding.length === 0) {
       return res.json({
@@ -1359,15 +1356,14 @@ app.post("/api/admin/backfill-extended-macros", async (req, res) => {
         const saturated_fat_g = estimatedItems.reduce((sum, it) => sum + (it.saturated_fat_g || 0), 0);
 
         // Update the meal
-        await sql`
-          UPDATE meals
-          SET items_json = ${JSON.stringify(estimatedItems)},
-              fiber_g = ${fiber_g},
-              sugar_g = ${sugar_g},
-              sodium_mg = ${sodium_mg},
-              saturated_fat_g = ${saturated_fat_g}
-          WHERE id = ${meal.id}
-        `;
+        await updateMealExtendedMacros(
+          meal.id,
+          fiber_g,
+          sugar_g,
+          sodium_mg,
+          saturated_fat_g,
+          JSON.stringify(estimatedItems)
+        );
 
         console.log(`[backfill] ✅ Meal ${meal.id}: fiber=${fiber_g.toFixed(1)}g, sugar=${sugar_g.toFixed(1)}g, sodium=${sodium_mg.toFixed(0)}mg, sat fat=${saturated_fat_g.toFixed(1)}g`);
         updated++;
