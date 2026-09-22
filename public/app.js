@@ -677,6 +677,15 @@ function statBlock(value, label) {
   return `<div><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`;
 }
 
+function statBlockWithHighlight(value, label, actualValue, userTarget, defaultLimit) {
+  // Use user's target if set, otherwise use the default recommended limit
+  const limit = userTarget || defaultLimit;
+  // Show in red if value exceeds the limit
+  const isHigh = actualValue > limit;
+  const color = isHigh ? "color: #dc2626; font-weight: 600;" : "";
+  return `<div><div class="stat-value" style="${color}">${value}</div><div class="stat-label">${label}</div></div>`;
+}
+
 function round1(n) {
   return Math.round((n || 0) * 10) / 10;
 }
@@ -700,6 +709,10 @@ const targetCaloriesInput = document.getElementById("target-calories");
 const targetProteinInput = document.getElementById("target-protein");
 const targetCarbsInput = document.getElementById("target-carbs");
 const targetFatInput = document.getElementById("target-fat");
+const targetFiberInput = document.getElementById("target-fiber");
+const targetSugarInput = document.getElementById("target-sugar");
+const targetSodiumInput = document.getElementById("target-sodium");
+const targetSatFatInput = document.getElementById("target-sat-fat");
 
 // --- Target calculator (BMR/TDEE from age/sex/weight/height/activity) ---
 let currentBio = null; // {age, sex, weight_kg, height_cm, activity} | null - saved so it doesn't need re-entering
@@ -803,6 +816,10 @@ editTargetBtn.addEventListener("click", () => {
   targetProteinInput.value = currentTargets?.protein_g ?? "";
   targetCarbsInput.value = currentTargets?.carbs_g ?? "";
   targetFatInput.value = currentTargets?.fat_g ?? "";
+  targetFiberInput.value = currentTargets?.fiber_g_limit ?? "";
+  targetSugarInput.value = currentTargets?.sugar_g_limit ?? "";
+  targetSodiumInput.value = currentTargets?.sodium_mg_limit ?? "";
+  targetSatFatInput.value = currentTargets?.saturated_fat_g_limit ?? "";
   applyBioToCalcForm();
 });
 
@@ -820,6 +837,10 @@ saveTargetBtn.addEventListener("click", async () => {
         protein_g: targetProteinInput.value,
         carbs_g: targetCarbsInput.value,
         fat_g: targetFatInput.value,
+        fiber_g_limit: targetFiberInput.value || 35,
+        sugar_g_limit: targetSugarInput.value || 50,
+        sodium_mg_limit: targetSodiumInput.value || 2300,
+        saturated_fat_g_limit: targetSatFatInput.value || 20,
       }),
     });
     const data = await res.json();
@@ -1290,6 +1311,12 @@ function renderMealList(container, meals, showEdit) {
           ${statBlock(round1(m.protein_g), "protein g")}
           ${statBlock(round1(m.carbs_g), "carbs g")}
           ${statBlock(round1(m.fat_g), "fat g")}
+        </div>
+        <div class="totals-grid" style="margin-top:8px">
+          ${statBlockWithHighlight(round1(m.fiber_g), "fiber g", m.fiber_g, currentTargets?.fiber_g_limit, 35)}
+          ${statBlockWithHighlight(round1(m.sugar_g), "sugar g", m.sugar_g, currentTargets?.sugar_g_limit, 50)}
+          ${statBlockWithHighlight(Math.round(m.sodium_mg), "sodium mg", m.sodium_mg, currentTargets?.sodium_mg_limit, 2300)}
+          ${statBlockWithHighlight(round1(m.saturated_fat_g), "sat fat g", m.saturated_fat_g, currentTargets?.saturated_fat_g_limit, 20)}
         </div>
       </div>`;
     })

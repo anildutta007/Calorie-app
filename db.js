@@ -103,6 +103,12 @@ async function init() {
       await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS target_carbs_g REAL`;
       await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS target_fat_g REAL`;
 
+      // Extended target limits for secondary macros.
+      await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS target_fiber_g REAL`;
+      await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS target_sugar_g REAL`;
+      await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS target_sodium_mg REAL`;
+      await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS target_saturated_fat_g REAL`;
+
       // Biometrics used only to auto-calculate a suggested target (BMR/TDEE).
       // Saved so a returning profile doesn't have to re-enter them every time.
       await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio_age INTEGER`;
@@ -340,13 +346,19 @@ function formatTargets(row) {
     protein_g: row.target_protein_g,
     carbs_g: row.target_carbs_g,
     fat_g: row.target_fat_g,
+    fiber_g_limit: row.target_fiber_g,
+    sugar_g_limit: row.target_sugar_g,
+    sodium_mg_limit: row.target_sodium_mg,
+    saturated_fat_g_limit: row.target_saturated_fat_g,
   };
 }
 
 async function getProfileTargets(profileId) {
   await init();
   const rows = await sql`
-    SELECT target_calories, target_protein_g, target_carbs_g, target_fat_g FROM profiles WHERE id = ${profileId}
+    SELECT target_calories, target_protein_g, target_carbs_g, target_fat_g,
+           target_fiber_g, target_sugar_g, target_sodium_mg, target_saturated_fat_g
+    FROM profiles WHERE id = ${profileId}
   `;
   return formatTargets(rows[0]);
 }
@@ -356,9 +368,12 @@ async function setProfileTargets(profileId, targets) {
   const rows = await sql`
     UPDATE profiles
     SET target_calories = ${targets.calories}, target_protein_g = ${targets.protein_g},
-        target_carbs_g = ${targets.carbs_g}, target_fat_g = ${targets.fat_g}
+        target_carbs_g = ${targets.carbs_g}, target_fat_g = ${targets.fat_g},
+        target_fiber_g = ${targets.fiber_g_limit || 35}, target_sugar_g = ${targets.sugar_g_limit || 50},
+        target_sodium_mg = ${targets.sodium_mg_limit || 2300}, target_saturated_fat_g = ${targets.saturated_fat_g_limit || 20}
     WHERE id = ${profileId}
-    RETURNING target_calories, target_protein_g, target_carbs_g, target_fat_g
+    RETURNING target_calories, target_protein_g, target_carbs_g, target_fat_g,
+              target_fiber_g, target_sugar_g, target_sodium_mg, target_saturated_fat_g
   `;
   return formatTargets(rows[0]);
 }
