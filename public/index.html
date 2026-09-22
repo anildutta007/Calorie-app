@@ -98,7 +98,10 @@
           <input id="photo-input" type="file" accept="image/*" capture="environment" style="display:none" />
         </div>
         <span id="mic-status" class="muted" style="display:block;min-height:1.1em;margin-bottom:4px;font-size:0.82rem"></span>
-        <textarea id="voice-text" placeholder="Describe what you ate — or use Speak / Snap above. Add any notes here too."></textarea>
+        <div style="position:relative;">
+          <textarea id="voice-text" placeholder="Describe what you ate — or use Speak / Snap above. Add any notes here too."></textarea>
+          <div id="recurring-suggestions" class="recurring-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:6px;max-height:250px;overflow-y:auto;z-index:1000;box-shadow:0 2px 8px rgba(0,0,0,0.1)"></div>
+        </div>
         <img id="photo-preview" class="photo-preview" style="display:none" />
         <div class="meal-time-row">
           <div style="flex: 1;">

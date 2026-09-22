@@ -360,6 +360,113 @@ function stopRecording() {
   try { recognition.stop(); } catch (e) {}
 }
 
+// ── Recurring Meals Autocomplete ───────────────────────────────────────────
+const recurringSuggestions = document.getElementById("recurring-suggestions");
+let recurringData = [];
+let selectedIndex = -1;
+
+// Fetch recurring meals on page load
+async function loadRecurringMeals() {
+  try {
+    const res = await fetch("/api/meals/recurring", { headers: profileHeaders() });
+    if (res.ok) {
+      const data = await res.json();
+      recurringData = data.recurring || [];
+    }
+  } catch (err) {
+    console.error("Failed to load recurring meals:", err);
+  }
+}
+loadRecurringMeals();
+
+// Autocomplete on input
+let autocompleteTimeout;
+voiceText.addEventListener("input", () => {
+  clearTimeout(autocompleteTimeout);
+  autocompleteTimeout = setTimeout(() => {
+    const query = voiceText.value.trim();
+    if (query.length > 0) {
+      showRecurringSuggestions(query);
+    } else {
+      recurringSuggestions.style.display = "none";
+    }
+    selectedIndex = -1;
+  }, 300); // Debounce 300ms
+});
+
+function showRecurringSuggestions(query) {
+  const filtered = recurringData.filter(m =>
+    m.description.toLowerCase().includes(query.toLowerCase())
+  ).slice(0, 5); // Show top 5
+
+  if (filtered.length === 0) {
+    recurringSuggestions.style.display = "none";
+    return;
+  }
+
+  recurringSuggestions.innerHTML = filtered.map((meal, i) => `
+    <div class="recurring-item" data-index="${i}" data-description="${escapeHtml(meal.description)}">
+      <div class="recurring-item-main">${escapeHtml(meal.description)}</div>
+      <div class="recurring-item-meta">
+        Eaten ${meal.frequency}x · Last: ${new Date(meal.lastEaten).toLocaleDateString()}
+        · ${Math.round(meal.avgCalories)} cal
+      </div>
+    </div>
+  `).join("");
+
+  recurringSuggestions.style.display = "block";
+
+  // Add click handlers
+  recurringSuggestions.querySelectorAll(".recurring-item").forEach(item => {
+    item.addEventListener("click", () => {
+      const description = item.dataset.description;
+      voiceText.value = description;
+      recurringSuggestions.style.display = "none";
+      selectedIndex = -1;
+    });
+  });
+}
+
+// Keyboard navigation
+voiceText.addEventListener("keydown", (e) => {
+  const items = recurringSuggestions.querySelectorAll(".recurring-item");
+  if (items.length === 0) return;
+
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+    updateSelectedItem(items);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    selectedIndex = Math.max(selectedIndex - 1, -1);
+    updateSelectedItem(items);
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (selectedIndex >= 0) {
+      const description = items[selectedIndex].dataset.description;
+      voiceText.value = description;
+      recurringSuggestions.style.display = "none";
+      selectedIndex = -1;
+    }
+  } else if (e.key === "Escape") {
+    recurringSuggestions.style.display = "none";
+    selectedIndex = -1;
+  }
+});
+
+function updateSelectedItem(items) {
+  items.forEach((item, i) => {
+    item.classList.toggle("active", i === selectedIndex);
+  });
+}
+
+// Hide suggestions when clicking outside
+document.addEventListener("click", (e) => {
+  if (!voiceText.contains(e.target) && !recurringSuggestions.contains(e.target)) {
+    recurringSuggestions.style.display = "none";
+  }
+});
+
 // ── Meal-time helpers ──────────────────────────────────────────────────────
 // Returns current time as "HH:MM" for pre-filling <input type="time">
 function nowTimeStr() {

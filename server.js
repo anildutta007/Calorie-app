@@ -305,6 +305,80 @@ app.get("/api/dates", async (req, res) => {
   }
 });
 
+// Get recurring meals for autocomplete
+app.get("/api/meals/recurring", async (req, res) => {
+  try {
+    const { query } = req.query;
+    const profileId = req.profileId;
+    if (!profileId) return res.status(401).json({ error: "Unauthorized" });
+
+    // Get meals from last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const dates = await listDates(profileId);
+    const allMeals = [];
+
+    // Fetch meals for each date in the last 30 days
+    for (const dateStr of dates) {
+      const date = new Date(dateStr);
+      if (date >= thirtyDaysAgo) {
+        const meals = await listMealsForDate(dateStr, profileId);
+        allMeals.push(...meals);
+      }
+    }
+
+    // Group by meal description (case-insensitive) and calculate frequency
+    const mealMap = new Map();
+    allMeals.forEach(meal => {
+      const key = meal.description.toLowerCase();
+      if (!mealMap.has(key)) {
+        mealMap.set(key, {
+          description: meal.description,
+          count: 0,
+          lastEaten: meal.created_at,
+          totalCalories: 0,
+          totalProtein: 0,
+          totalCarbs: 0,
+          totalFat: 0
+        });
+      }
+      const entry = mealMap.get(key);
+      entry.count += 1;
+      entry.lastEaten = new Date(meal.created_at) > new Date(entry.lastEaten) ? meal.created_at : entry.lastEaten;
+      entry.totalCalories += meal.calories;
+      entry.totalProtein += meal.protein_g;
+      entry.totalCarbs += meal.carbs_g;
+      entry.totalFat += meal.fat_g;
+    });
+
+    // Convert to array and sort by frequency (descending)
+    let recurring = Array.from(mealMap.values())
+      .sort((a, b) => b.count - a.count)
+      .map(m => ({
+        description: m.description,
+        frequency: m.count,
+        lastEaten: m.lastEaten,
+        avgCalories: Math.round(m.totalCalories / m.count),
+        avgProtein: Math.round((m.totalProtein / m.count) * 10) / 10,
+        avgCarbs: Math.round((m.totalCarbs / m.count) * 10) / 10,
+        avgFat: Math.round((m.totalFat / m.count) * 10) / 10
+      }));
+
+    // Filter by query if provided
+    if (query && query.length > 0) {
+      const q = query.toLowerCase();
+      recurring = recurring.filter(m => m.description.toLowerCase().includes(q));
+    }
+
+    // Return top 10 matches
+    res.json({ recurring: recurring.slice(0, 10) });
+  } catch (err) {
+    console.error("recurring meals error:", err);
+    res.status(500).json({ error: err.message || "Failed to load recurring meals" });
+  }
+});
+
 app.delete("/api/meals/:id", async (req, res) => {
   try {
     await deleteMeal(Number(req.params.id), req.profileId);
