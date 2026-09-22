@@ -604,12 +604,13 @@ async function findInactiveProfiles(daysThreshold = 21) {
 async function deleteProfile(profileId) {
   await init();
   // Delete in correct order due to foreign keys
-  await sql`DELETE FROM exercise_log WHERE profile_id = ${profileId}`;
-  await sql`DELETE FROM weight_log WHERE profile_id = ${profileId}`;
-  await sql`DELETE FROM health_sync_tokens WHERE profile_id = ${profileId}`;
-  await sql`DELETE FROM meal_plans WHERE profile_id = ${profileId}`;
-  await sql`DELETE FROM meal_plan_recipes WHERE profile_id = ${profileId}`;
-  await sql`DELETE FROM meals WHERE profile_id = ${profileId}`;
+  // Use soft deletes (try/catch) for tables that might not exist
+  try { await sql`DELETE FROM exercise_log WHERE profile_id = ${profileId}`; } catch (e) { /* table may not exist */ }
+  try { await sql`DELETE FROM weight_log WHERE profile_id = ${profileId}`; } catch (e) { /* table may not exist */ }
+  try { await sql`DELETE FROM health_sync_tokens WHERE profile_id = ${profileId}`; } catch (e) { /* table may not exist */ }
+  try { await sql`DELETE FROM meal_plans WHERE profile_id = ${profileId}`; } catch (e) { /* table may not exist */ }
+  try { await sql`DELETE FROM meal_plan_recipes WHERE profile_id = ${profileId}`; } catch (e) { /* table may not exist */ }
+  try { await sql`DELETE FROM meals WHERE profile_id = ${profileId}`; } catch (e) { /* table may not exist */ }
   await sql`DELETE FROM profiles WHERE id = ${profileId}`;
   return true;
 }
