@@ -580,6 +580,40 @@ async function getExerciseRecent(profileId, days) {
   return rows;
 }
 
+// Cleanup: find profiles with no meal data in the last N days
+async function findInactiveProfiles(daysThreshold = 21) {
+  await init();
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - daysThreshold);
+  const cutoffIso = cutoffDate.toISOString();
+
+  const rows = await sql`
+    SELECT p.id, p.name, p.created_at,
+           MAX(m.created_at) as last_meal_date,
+           COUNT(m.id) as meal_count
+    FROM profiles p
+    LEFT JOIN meals m ON p.id = m.profile_id
+    GROUP BY p.id, p.name, p.created_at
+    HAVING MAX(m.created_at) IS NULL OR MAX(m.created_at) < ${cutoffIso}
+    ORDER BY p.created_at DESC
+  `;
+  return rows;
+}
+
+// Delete a profile and all associated data
+async function deleteProfile(profileId) {
+  await init();
+  // Delete in correct order due to foreign keys
+  await sql`DELETE FROM exercise_log WHERE profile_id = ${profileId}`;
+  await sql`DELETE FROM weight_log WHERE profile_id = ${profileId}`;
+  await sql`DELETE FROM health_sync_tokens WHERE profile_id = ${profileId}`;
+  await sql`DELETE FROM meal_plans WHERE profile_id = ${profileId}`;
+  await sql`DELETE FROM meal_plan_recipes WHERE profile_id = ${profileId}`;
+  await sql`DELETE FROM meals WHERE profile_id = ${profileId}`;
+  await sql`DELETE FROM profiles WHERE id = ${profileId}`;
+  return true;
+}
+
 module.exports = {
   insertMeal,
   getMeal,
@@ -609,4 +643,6 @@ module.exports = {
   upsertExercise,
   getExerciseByDate,
   getExerciseRecent,
+  findInactiveProfiles,
+  deleteProfile,
 };

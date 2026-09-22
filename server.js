@@ -32,6 +32,8 @@ const {
   upsertExercise,
   getExerciseByDate,
   getExerciseRecent,
+  findInactiveProfiles,
+  deleteProfile,
 } = require("./db");
 const { analyzeMealText, analyzeMealPhoto, estimateItemMacros, generateDailyQuote, generateProgressSummary } = require("./nutrition");
 const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mealplan");
@@ -1249,6 +1251,60 @@ app.get("/api/admin/daily-report", async (req, res) => {
 
   } catch (err) {
     console.error("[daily-report] Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin endpoint: cleanup inactive profiles (no meal data in last 21 days)
+app.post("/api/admin/cleanup-inactive-profiles", async (req, res) => {
+  try {
+    const { daysThreshold = 21, idsToKeep = [] } = req.body;
+
+    if (!daysThreshold || daysThreshold < 1) {
+      return res.status(400).json({ error: "daysThreshold must be >= 1" });
+    }
+
+    console.log(`[cleanup] Finding profiles with no meals in last ${daysThreshold} days...`);
+    const inactiveProfiles = await findInactiveProfiles(daysThreshold);
+
+    // Filter out profiles to keep
+    const profilesToDelete = inactiveProfiles.filter(p => !idsToKeep.includes(p.id));
+
+    if (profilesToDelete.length === 0) {
+      return res.json({
+        message: "No profiles to delete",
+        totalInactive: inactiveProfiles.length,
+        kept: inactiveProfiles.length,
+        deleted: 0
+      });
+    }
+
+    console.log(`[cleanup] Deleting ${profilesToDelete.length} inactive profile(s)...`);
+    const deletedProfiles = [];
+    const errors = [];
+
+    for (const profile of profilesToDelete) {
+      try {
+        await deleteProfile(profile.id);
+        deletedProfiles.push({ id: profile.id, name: profile.name });
+        console.log(`[cleanup] ✅ Deleted: ${profile.name} (ID: ${profile.id})`);
+      } catch (err) {
+        errors.push({ id: profile.id, name: profile.name, error: err.message });
+        console.error(`[cleanup] ❌ Failed to delete ${profile.name} (ID: ${profile.id}):`, err.message);
+      }
+    }
+
+    res.json({
+      message: "Cleanup complete",
+      totalInactive: inactiveProfiles.length,
+      kept: idsToKeep.length,
+      deleted: deletedProfiles.length,
+      deletedProfiles,
+      errors: errors.length > 0 ? errors : undefined
+    });
+
+  } catch (err) {
+    console.error("[cleanup] Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
