@@ -648,10 +648,10 @@ async function updateMealExtendedMacros(mealId, fiber_g, sugar_g, sodium_mg, sat
 }
 
 // Toggle meal as favorite
-async function toggleMealFavorite(mealId, timeZone) {
+async function toggleMealFavorite(mealId, profileId, timeZone) {
   await init();
   const meal = await getMeal(mealId);
-  if (!meal) throw new Error("Meal not found");
+  if (!meal || meal.profile_id !== profileId) throw new Error("Meal not found");
 
   const newFavoriteStatus = !meal.is_favorite;
   return await sql`

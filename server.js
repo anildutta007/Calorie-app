@@ -460,7 +460,7 @@ app.put("/api/meals/:id", async (req, res) => {
 app.post("/api/meals/:id/toggle-favorite", async (req, res) => {
   try {
     const timeZone = req.body.timeZone || "morning"; // e.g., "morning", "afternoon", "evening"
-    const meal = await toggleMealFavorite(Number(req.params.id), timeZone);
+    const meal = await toggleMealFavorite(Number(req.params.id), req.profileId, timeZone);
     res.json(meal);
   } catch (err) {
     console.error(err);
