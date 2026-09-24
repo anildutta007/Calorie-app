@@ -1545,6 +1545,8 @@ function renderZoneTimeline(container, meals, showEdit, onDelete) {
 
         if (res.ok) {
           const meal = await res.json();
+          // Update cached meal data so re-renders use correct is_favorite status
+          mealsById[mealId] = meal;
           btn.textContent = meal.is_favorite ? '★' : '☆';
           btn.title = meal.is_favorite ? 'Remove favorite' : 'Add favorite';
           btn.style.opacity = "1";
@@ -1794,6 +1796,8 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
 
         if (res.ok) {
           const meal = await res.json();
+          // Update cached meal data so re-renders use correct is_favorite status
+          mealsById[mealId] = meal;
           btn.textContent = meal.is_favorite ? '★' : '☆';
           btn.title = meal.is_favorite ? 'Remove favorite' : 'Add favorite';
           btn.style.opacity = "1";
@@ -1971,6 +1975,8 @@ function renderZonePanels(container, meals, total, showEdit, onDelete) {
 
         if (res.ok) {
           const meal = await res.json();
+          // Update cached meal data so re-renders use correct is_favorite status
+          mealsById[mealId] = meal;
           btn.textContent = meal.is_favorite ? '★' : '☆';
           btn.title = meal.is_favorite ? 'Remove favorite' : 'Add favorite';
           btn.style.opacity = "1";
