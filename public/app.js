@@ -366,11 +366,10 @@ const favoritesSuggestions = document.getElementById("recurring-suggestions"); /
 let favoritesData = [];
 let selectedIndex = -1;
 
-// Fetch favorite meals for current time zone
+// Fetch all favorite meals (not time-zone filtered for logging input)
 async function loadFavoriteMeals() {
   try {
-    const timeZone = getCurrentTimeZone();
-    const res = await fetch(`/api/favorites?timeZone=${timeZone}`, { headers: profileHeaders() });
+    const res = await fetch(`/api/all-favorites`, { headers: profileHeaders() });
     if (res.ok) {
       const data = await res.json();
       favoritesData = data.favorites || [];
