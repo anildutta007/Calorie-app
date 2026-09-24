@@ -1527,24 +1527,38 @@ function renderZoneTimeline(container, meals, showEdit, onDelete) {
 
   // Wire up favorites
   container.querySelectorAll(".favorite-btn").forEach(btn => {
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       try {
         const mealId = btn.dataset.id;
         const timeZone = getCurrentTimeZone();
+        const wasDisabled = btn.disabled;
+        btn.disabled = true;
+        btn.style.opacity = "0.6";
+
         const res = await fetch(`/api/meals/${mealId}/toggle-favorite`, {
           method: "POST",
           headers: { ...profileHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({ timeZone })
         });
+
         if (res.ok) {
           const meal = await res.json();
           btn.textContent = meal.is_favorite ? '★' : '☆';
           btn.title = meal.is_favorite ? 'Remove favorite' : 'Add favorite';
+          btn.style.opacity = "1";
           // Reload favorites for the dropdown
           await loadFavoriteMeals();
+        } else {
+          console.error("Toggle favorite failed:", res.status, res.statusText);
+          btn.style.opacity = "1";
         }
       } catch (err) {
         console.error("Failed to toggle favorite:", err);
+        btn.style.opacity = "1";
+      } finally {
+        btn.disabled = false;
       }
     });
   });
@@ -1762,24 +1776,38 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
   });
 
   container.querySelectorAll(".favorite-btn").forEach(btn => {
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       try {
         const mealId = btn.dataset.id;
         const timeZone = getCurrentTimeZone();
+        const wasDisabled = btn.disabled;
+        btn.disabled = true;
+        btn.style.opacity = "0.6";
+
         const res = await fetch(`/api/meals/${mealId}/toggle-favorite`, {
           method: "POST",
           headers: { ...profileHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({ timeZone })
         });
+
         if (res.ok) {
           const meal = await res.json();
           btn.textContent = meal.is_favorite ? '★' : '☆';
           btn.title = meal.is_favorite ? 'Remove favorite' : 'Add favorite';
+          btn.style.opacity = "1";
           // Reload favorites for the dropdown
           await loadFavoriteMeals();
+        } else {
+          console.error("Toggle favorite failed:", res.status, res.statusText);
+          btn.style.opacity = "1";
         }
       } catch (err) {
         console.error("Failed to toggle favorite:", err);
+        btn.style.opacity = "1";
+      } finally {
+        btn.disabled = false;
       }
     });
   });
@@ -1925,24 +1953,38 @@ function renderZonePanels(container, meals, total, showEdit, onDelete) {
     });
   });
   container.querySelectorAll(".favorite-btn").forEach(btn => {
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       try {
         const mealId = btn.dataset.id;
         const timeZone = getCurrentTimeZone();
+        const wasDisabled = btn.disabled;
+        btn.disabled = true;
+        btn.style.opacity = "0.6";
+
         const res = await fetch(`/api/meals/${mealId}/toggle-favorite`, {
           method: "POST",
           headers: { ...profileHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({ timeZone })
         });
+
         if (res.ok) {
           const meal = await res.json();
           btn.textContent = meal.is_favorite ? '★' : '☆';
           btn.title = meal.is_favorite ? 'Remove favorite' : 'Add favorite';
+          btn.style.opacity = "1";
           // Reload favorites for the dropdown
           await loadFavoriteMeals();
+        } else {
+          console.error("Toggle favorite failed:", res.status, res.statusText);
+          btn.style.opacity = "1";
         }
       } catch (err) {
         console.error("Failed to toggle favorite:", err);
+        btn.style.opacity = "1";
+      } finally {
+        btn.disabled = false;
       }
     });
   });
