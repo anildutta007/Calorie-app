@@ -654,7 +654,7 @@ async function toggleMealFavorite(mealId, profileId, timeZone) {
   if (!meal) throw new Error("Meal not found");
 
   const newFavoriteStatus = !meal.is_favorite;
-  return await sql`
+  const result = await sql`
     UPDATE meals
     SET is_favorite = ${newFavoriteStatus},
         favorite_time_zone = ${newFavoriteStatus ? timeZone : null},
@@ -662,6 +662,7 @@ async function toggleMealFavorite(mealId, profileId, timeZone) {
     WHERE id = ${mealId}
     RETURNING *
   `;
+  return result[0];
 }
 
 // Get top N favorite meals for a profile in a given time zone
@@ -682,12 +683,13 @@ async function getFavoriteMeals(profileId, timeZone, limit = 10) {
 // Update favorite meal name
 async function updateFavoriteName(mealId, newName) {
   await init();
-  return await sql`
+  const result = await sql`
     UPDATE meals
     SET favorite_name = ${newName}
     WHERE id = ${mealId}
     RETURNING *
   `;
+  return result[0];
 }
 
 module.exports = {
