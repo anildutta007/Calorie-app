@@ -190,7 +190,7 @@ function enterApp() {
   loadAppVersion();
   loadDailyGreeting();
   loadRecurringMeals();
-  Promise.all([loadBio(), loadTargets()]).then(loadToday);
+  Promise.all([loadBio(), loadTargets(), loadFavoriteMeals()]).then(loadToday);
 }
 
 async function loadAppVersion() {
@@ -362,74 +362,71 @@ function stopRecording() {
 }
 
 // ── Recurring Meals Autocomplete ───────────────────────────────────────────
-const recurringSuggestions = document.getElementById("recurring-suggestions");
-let recurringData = [];
+const favoritesSuggestions = document.getElementById("recurring-suggestions"); // Reuse same element
+let favoritesData = [];
 let selectedIndex = -1;
 
-// Fetch recurring meals
-async function loadRecurringMeals() {
+// Fetch favorite meals for current time zone
+async function loadFavoriteMeals() {
   try {
-    const res = await fetch("/api/meals/recurring", { headers: profileHeaders() });
+    const timeZone = getCurrentTimeZone();
+    const res = await fetch(`/api/favorites?timeZone=${timeZone}`, { headers: profileHeaders() });
     if (res.ok) {
       const data = await res.json();
-      recurringData = data.recurring || [];
+      favoritesData = data.favorites || [];
     }
   } catch (err) {
-    console.error("Failed to load recurring meals:", err);
+    console.error("Failed to load favorite meals:", err);
   }
 }
 
-// Autocomplete on input
-let autocompleteTimeout;
-voiceText.addEventListener("input", () => {
-  clearTimeout(autocompleteTimeout);
-  autocompleteTimeout = setTimeout(() => {
-    const query = voiceText.value.trim();
-    if (query.length > 0) {
-      showRecurringSuggestions(query);
-    } else {
-      recurringSuggestions.style.display = "none";
-    }
-    selectedIndex = -1;
-  }, 300); // Debounce 300ms
+// Show favorites dropdown on focus
+voiceText.addEventListener("focus", () => {
+  if (favoritesData.length > 0) {
+    showFavoritesSuggestions();
+  }
 });
 
-function showRecurringSuggestions(query) {
-  const filtered = recurringData.filter(m =>
-    m.description.toLowerCase().includes(query.toLowerCase())
-  ).slice(0, 5); // Show top 5
+// Hide favorites dropdown when clicking outside
+document.addEventListener("click", (e) => {
+  if (e.target !== voiceText && e.target !== favoritesSuggestions) {
+    favoritesSuggestions.style.display = "none";
+  }
+});
 
-  if (filtered.length === 0) {
-    recurringSuggestions.style.display = "none";
+function showFavoritesSuggestions() {
+  if (favoritesData.length === 0) {
+    favoritesSuggestions.innerHTML = '<div class="recurring-item" style="padding:8px;text-align:center;color:var(--muted)">No favorite meals yet. Star a meal to save it.</div>';
+    favoritesSuggestions.style.display = "block";
     return;
   }
 
-  recurringSuggestions.innerHTML = filtered.map((meal, i) => `
-    <div class="recurring-item" data-index="${i}" data-description="${escapeHtml(meal.description)}">
-      <div class="recurring-item-main">${escapeHtml(meal.description)}</div>
+  favoritesSuggestions.innerHTML = favoritesData.map((meal, i) => `
+    <div class="recurring-item" data-index="${i}" data-meal-id="${meal.id}">
+      <div class="recurring-item-main">${escapeHtml(meal.favorite_name || meal.description)}</div>
       <div class="recurring-item-meta">
-        Eaten ${meal.frequency}x · Last: ${new Date(meal.lastEaten).toLocaleDateString()}
-        · ${Math.round(meal.avgCalories)} cal
+        ${Math.round(meal.calories)} cal · P ${round1(meal.protein_g)}g · C ${round1(meal.carbs_g)}g · F ${round1(meal.fat_g)}g
       </div>
     </div>
   `).join("");
 
-  recurringSuggestions.style.display = "block";
+  favoritesSuggestions.style.display = "block";
 
   // Add click handlers
-  recurringSuggestions.querySelectorAll(".recurring-item").forEach(item => {
+  favoritesSuggestions.querySelectorAll(".recurring-item").forEach(item => {
+    const meal = favoritesData[parseInt(item.dataset.index)];
+    if (!meal) return;
     item.addEventListener("click", () => {
-      const description = item.dataset.description;
-      voiceText.value = description;
-      recurringSuggestions.style.display = "none";
+      voiceText.value = meal.favorite_name || meal.description;
+      favoritesSuggestions.style.display = "none";
       selectedIndex = -1;
     });
   });
 }
 
-// Keyboard navigation
+// Keyboard navigation for favorites
 voiceText.addEventListener("keydown", (e) => {
-  const items = recurringSuggestions.querySelectorAll(".recurring-item");
+  const items = favoritesSuggestions.querySelectorAll(".recurring-item");
   if (items.length === 0) return;
 
   if (e.key === "ArrowDown") {
@@ -442,14 +439,14 @@ voiceText.addEventListener("keydown", (e) => {
     updateSelectedItem(items);
   } else if (e.key === "Enter") {
     e.preventDefault();
-    if (selectedIndex >= 0) {
-      const description = items[selectedIndex].dataset.description;
-      voiceText.value = description;
-      recurringSuggestions.style.display = "none";
+    if (selectedIndex >= 0 && favoritesData[selectedIndex]) {
+      const meal = favoritesData[selectedIndex];
+      voiceText.value = meal.favorite_name || meal.description;
+      favoritesSuggestions.style.display = "none";
       selectedIndex = -1;
     }
   } else if (e.key === "Escape") {
-    recurringSuggestions.style.display = "none";
+    favoritesSuggestions.style.display = "none";
     selectedIndex = -1;
   }
 });
@@ -459,13 +456,6 @@ function updateSelectedItem(items) {
     item.classList.toggle("active", i === selectedIndex);
   });
 }
-
-// Hide suggestions when clicking outside
-document.addEventListener("click", (e) => {
-  if (!voiceText.contains(e.target) && !recurringSuggestions.contains(e.target)) {
-    recurringSuggestions.style.display = "none";
-  }
-});
 
 // ── Meal-time helpers ──────────────────────────────────────────────────────
 // Returns current time as "HH:MM" for pre-filling <input type="time">
@@ -696,6 +686,16 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str ?? "";
   return div.innerHTML;
+}
+
+// Get time zone based on current hour
+function getCurrentTimeZone() {
+  const h = new Date().getHours();
+  if (h >= 0 && h < 6) return "early_morning";
+  if (h >= 6 && h < 12) return "morning";
+  if (h >= 12 && h < 15) return "afternoon";
+  if (h >= 15 && h < 18) return "evening";
+  return "night";
 }
 
 // --- Daily targets ---
@@ -1481,6 +1481,7 @@ function renderZoneTimeline(container, meals, showEdit, onDelete) {
           <div class="tl-card-header">
             <div class="tl-card-title">${escapeHtml(m.description)}</div>
             <div class="tl-card-actions">
+              <button class="favorite-btn" data-id="${m.id}" title="${m.is_favorite ? 'Remove favorite' : 'Add favorite'}" style="font-size:1.2em;background:none;border:none;padding:4px;cursor:pointer">${m.is_favorite ? '★' : '☆'}</button>
               <button class="detail-btn" data-id="${m.id}" title="Show food details">D</button>
               ${showEdit ? `<button class="edit-btn" data-id="${m.id}">Edit</button>` : ""}
               <button class="delete-btn" data-id="${m.id}">Delete</button>
@@ -1521,6 +1522,30 @@ function renderZoneTimeline(container, meals, showEdit, onDelete) {
       detail.hidden = open;
       btn.classList.toggle("detail-btn-on", !open);
       btn.title = open ? "Show food details" : "Hide food details";
+    });
+  });
+
+  // Wire up favorites
+  container.querySelectorAll(".favorite-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      try {
+        const mealId = btn.dataset.id;
+        const timeZone = getCurrentTimeZone();
+        const res = await fetch(`/api/meals/${mealId}/toggle-favorite`, {
+          method: "POST",
+          headers: { ...profileHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({ timeZone })
+        });
+        if (res.ok) {
+          const meal = await res.json();
+          btn.textContent = meal.is_favorite ? '★' : '☆';
+          btn.title = meal.is_favorite ? 'Remove favorite' : 'Add favorite';
+          // Reload favorites for the dropdown
+          await loadFavoriteMeals();
+        }
+      } catch (err) {
+        console.error("Failed to toggle favorite:", err);
+      }
     });
   });
 
@@ -1691,6 +1716,7 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
           <div class="tl-card-header">
             <div class="tl-card-title">${escapeHtml(m.description)}</div>
             <div class="tl-card-actions">
+              <button class="favorite-btn" data-id="${m.id}" title="${m.is_favorite ? 'Remove favorite' : 'Add favorite'}" style="font-size:1.2em;background:none;border:none;padding:4px;cursor:pointer">${m.is_favorite ? '★' : '☆'}</button>
               <button class="detail-btn" data-id="${m.id}" title="Show food details">D</button>
               ${showEdit ? `<button class="edit-btn" data-id="${m.id}">Edit</button>` : ""}
               <button class="delete-btn" data-id="${m.id}">Delete</button>
@@ -1732,6 +1758,29 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
       detail.hidden = open;
       btn.classList.toggle("detail-btn-on", !open);
       btn.title = open ? "Show food details" : "Hide food details";
+    });
+  });
+
+  container.querySelectorAll(".favorite-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      try {
+        const mealId = btn.dataset.id;
+        const timeZone = getCurrentTimeZone();
+        const res = await fetch(`/api/meals/${mealId}/toggle-favorite`, {
+          method: "POST",
+          headers: { ...profileHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({ timeZone })
+        });
+        if (res.ok) {
+          const meal = await res.json();
+          btn.textContent = meal.is_favorite ? '★' : '☆';
+          btn.title = meal.is_favorite ? 'Remove favorite' : 'Add favorite';
+          // Reload favorites for the dropdown
+          await loadFavoriteMeals();
+        }
+      } catch (err) {
+        console.error("Failed to toggle favorite:", err);
+      }
     });
   });
 
@@ -1817,6 +1866,7 @@ function renderZonePanels(container, meals, total, showEdit, onDelete) {
           <div class="tl-card-header">
             <div class="tl-card-title">${escapeHtml(m.description)}</div>
             <div class="tl-card-actions">
+              <button class="favorite-btn" data-id="${m.id}" title="${m.is_favorite ? 'Remove favorite' : 'Add favorite'}" style="font-size:1.2em;background:none;border:none;padding:4px;cursor:pointer">${m.is_favorite ? '★' : '☆'}</button>
               <button class="detail-btn" data-id="${m.id}" title="Show food details">D</button>
               ${showEdit ? `<button class="edit-btn" data-id="${m.id}">Edit</button>` : ""}
               <button class="delete-btn" data-id="${m.id}">Delete</button>
@@ -1872,6 +1922,28 @@ function renderZonePanels(container, meals, total, showEdit, onDelete) {
       detail.hidden = open;
       btn.classList.toggle("detail-btn-on", !open);
       btn.title = open ? "Show food details" : "Hide food details";
+    });
+  });
+  container.querySelectorAll(".favorite-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      try {
+        const mealId = btn.dataset.id;
+        const timeZone = getCurrentTimeZone();
+        const res = await fetch(`/api/meals/${mealId}/toggle-favorite`, {
+          method: "POST",
+          headers: { ...profileHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({ timeZone })
+        });
+        if (res.ok) {
+          const meal = await res.json();
+          btn.textContent = meal.is_favorite ? '★' : '☆';
+          btn.title = meal.is_favorite ? 'Remove favorite' : 'Add favorite';
+          // Reload favorites for the dropdown
+          await loadFavoriteMeals();
+        }
+      } catch (err) {
+        console.error("Failed to toggle favorite:", err);
+      }
     });
   });
   container.querySelectorAll(".delete-btn").forEach(btn => {

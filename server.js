@@ -36,6 +36,9 @@ const {
   deleteProfile,
   getMealsNeedingBackfill,
   updateMealExtendedMacros,
+  toggleMealFavorite,
+  getFavoriteMeals,
+  updateFavoriteName,
 } = require("./db");
 const { analyzeMealText, analyzeMealPhoto, estimateItemMacros, generateDailyQuote, generateProgressSummary } = require("./nutrition");
 const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mealplan");
@@ -450,6 +453,43 @@ app.put("/api/meals/:id", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(err.status || 500).json({ error: err.message || "Failed to update meal." });
+  }
+});
+
+// Toggle meal as favorite
+app.post("/api/meals/:id/toggle-favorite", async (req, res) => {
+  try {
+    const timeZone = req.body.timeZone || "morning"; // e.g., "morning", "afternoon", "evening"
+    const meal = await toggleMealFavorite(Number(req.params.id), timeZone);
+    res.json(meal);
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message || "Failed to toggle favorite." });
+  }
+});
+
+// Get favorite meals for current time zone
+app.get("/api/favorites", async (req, res) => {
+  try {
+    const timeZone = req.query.timeZone || "morning";
+    const favorites = await getFavoriteMeals(req.profileId, timeZone, 10);
+    res.json({ favorites });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to load favorites." });
+  }
+});
+
+// Update favorite meal name
+app.put("/api/meals/:id/favorite-name", async (req, res) => {
+  try {
+    const newName = String(req.body.name || "").trim();
+    if (!newName) return res.status(400).json({ error: "Favorite name is required." });
+    const meal = await updateFavoriteName(Number(req.params.id), newName);
+    res.json(meal);
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message || "Failed to update favorite name." });
   }
 });
 

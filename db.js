@@ -124,6 +124,13 @@ async function init() {
       await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS sodium_mg REAL DEFAULT 0`;
       await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS saturated_fat_g REAL DEFAULT 0`;
 
+      // Meal favorites: allow users to bookmark meals for quick re-logging.
+      // favorite_time_zone: when the meal was favorited (e.g., "morning", "afternoon")
+      // favorite_name: user's custom name for the favorite (optional)
+      await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT false`;
+      await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS favorite_name TEXT`;
+      await sql`ALTER TABLE meals ADD COLUMN IF NOT EXISTS favorite_time_zone TEXT`;
+
       // Weight log: manual weigh-ins recorded with date + time.
       await sql`
         CREATE TABLE IF NOT EXISTS weight_log (
@@ -640,6 +647,49 @@ async function updateMealExtendedMacros(mealId, fiber_g, sugar_g, sodium_mg, sat
   `;
 }
 
+// Toggle meal as favorite
+async function toggleMealFavorite(mealId, timeZone) {
+  await init();
+  const meal = await getMeal(mealId);
+  if (!meal) throw new Error("Meal not found");
+
+  const newFavoriteStatus = !meal.is_favorite;
+  return await sql`
+    UPDATE meals
+    SET is_favorite = ${newFavoriteStatus},
+        favorite_time_zone = ${newFavoriteStatus ? timeZone : null},
+        favorite_name = ${newFavoriteStatus ? meal.description : null}
+    WHERE id = ${mealId}
+    RETURNING *
+  `;
+}
+
+// Get top N favorite meals for a profile in a given time zone
+async function getFavoriteMeals(profileId, timeZone, limit = 10) {
+  await init();
+  return await sql`
+    SELECT id, description, favorite_name, calories, protein_g, carbs_g, fat_g,
+           fiber_g, sugar_g, sodium_mg, saturated_fat_g
+    FROM meals
+    WHERE profile_id = ${profileId}
+      AND is_favorite = true
+      AND favorite_time_zone = ${timeZone}
+    ORDER BY created_at DESC
+    LIMIT ${limit}
+  `;
+}
+
+// Update favorite meal name
+async function updateFavoriteName(mealId, newName) {
+  await init();
+  return await sql`
+    UPDATE meals
+    SET favorite_name = ${newName}
+    WHERE id = ${mealId}
+    RETURNING *
+  `;
+}
+
 module.exports = {
   insertMeal,
   getMeal,
@@ -673,4 +723,7 @@ module.exports = {
   deleteProfile,
   getMealsNeedingBackfill,
   updateMealExtendedMacros,
+  toggleMealFavorite,
+  getFavoriteMeals,
+  updateFavoriteName,
 };
