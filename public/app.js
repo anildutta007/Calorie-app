@@ -695,6 +695,17 @@ function getCurrentTimeZone() {
   return "night";
 }
 
+function getTimeZoneFromCreatedAt(createdAtIso) {
+  if (!createdAtIso) return getCurrentTimeZone();
+  const date = new Date(createdAtIso);
+  const h = date.getHours();
+  if (h >= 0 && h < 6) return "early_morning";
+  if (h >= 6 && h < 12) return "morning";
+  if (h >= 12 && h < 15) return "afternoon";
+  if (h >= 15 && h < 18) return "evening";
+  return "night";
+}
+
 // --- Daily targets ---
 const targetDisplay = document.getElementById("target-display");
 const targetForm = document.getElementById("target-form");
@@ -1529,7 +1540,8 @@ function renderZoneTimeline(container, meals, showEdit, onDelete) {
       e.stopPropagation();
       try {
         const mealId = btn.dataset.id;
-        const timeZone = getCurrentTimeZone();
+        const meal = mealsById[mealId];
+        const timeZone = meal?.created_at ? getTimeZoneFromCreatedAt(meal.created_at) : getCurrentTimeZone();
         const wasDisabled = btn.disabled;
         btn.disabled = true;
         btn.style.opacity = "0.6";
@@ -1541,10 +1553,10 @@ function renderZoneTimeline(container, meals, showEdit, onDelete) {
         });
 
         if (res.ok) {
-          const meal = await res.json();
-          mealsById[mealId] = meal;
-          btn.textContent = meal.is_favorite ? '★' : '☆';
-          btn.title = meal.is_favorite ? 'Remove favorite' : 'Add favorite';
+          const updatedMeal = await res.json();
+          mealsById[mealId] = updatedMeal;
+          btn.textContent = updatedMeal.is_favorite ? '★' : '☆';
+          btn.title = updatedMeal.is_favorite ? 'Remove favorite' : 'Add favorite';
           btn.style.opacity = "1";
           await loadFavoriteMeals();
         } else {
@@ -1778,7 +1790,8 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
       e.stopPropagation();
       try {
         const mealId = btn.dataset.id;
-        const timeZone = getCurrentTimeZone();
+        const meal = mealsById[mealId];
+        const timeZone = meal?.created_at ? getTimeZoneFromCreatedAt(meal.created_at) : getCurrentTimeZone();
         const wasDisabled = btn.disabled;
         btn.disabled = true;
         btn.style.opacity = "0.6";
@@ -1790,10 +1803,10 @@ function renderZoneMacroView(container, meals, total, showEdit, onDelete) {
         });
 
         if (res.ok) {
-          const meal = await res.json();
-          mealsById[mealId] = meal;
-          btn.textContent = meal.is_favorite ? '★' : '☆';
-          btn.title = meal.is_favorite ? 'Remove favorite' : 'Add favorite';
+          const updatedMeal = await res.json();
+          mealsById[mealId] = updatedMeal;
+          btn.textContent = updatedMeal.is_favorite ? '★' : '☆';
+          btn.title = updatedMeal.is_favorite ? 'Remove favorite' : 'Add favorite';
           btn.style.opacity = "1";
           await loadFavoriteMeals();
         } else {
@@ -1955,7 +1968,8 @@ function renderZonePanels(container, meals, total, showEdit, onDelete) {
       e.stopPropagation();
       try {
         const mealId = btn.dataset.id;
-        const timeZone = getCurrentTimeZone();
+        const meal = mealsById[mealId];
+        const timeZone = meal?.created_at ? getTimeZoneFromCreatedAt(meal.created_at) : getCurrentTimeZone();
         const wasDisabled = btn.disabled;
         btn.disabled = true;
         btn.style.opacity = "0.6";
@@ -1967,10 +1981,10 @@ function renderZonePanels(container, meals, total, showEdit, onDelete) {
         });
 
         if (res.ok) {
-          const meal = await res.json();
-          mealsById[mealId] = meal;
-          btn.textContent = meal.is_favorite ? '★' : '☆';
-          btn.title = meal.is_favorite ? 'Remove favorite' : 'Add favorite';
+          const updatedMeal = await res.json();
+          mealsById[mealId] = updatedMeal;
+          btn.textContent = updatedMeal.is_favorite ? '★' : '☆';
+          btn.title = updatedMeal.is_favorite ? 'Remove favorite' : 'Add favorite';
           btn.style.opacity = "1";
           await loadFavoriteMeals();
         } else {
