@@ -40,6 +40,7 @@ const {
   getFavoriteMeals,
   getAllFavoriteMeals,
   updateFavoriteName,
+  updateProfilePin,
 } = require("./db");
 const { analyzeMealText, analyzeMealPhoto, estimateItemMacros, generateDailyQuote, generateProgressSummary } = require("./nutrition");
 const { generateMealPlan, ALL_NONVEG_PROTEINS, ALL_VEG_ADDONS } = require("./mealplan");
@@ -177,6 +178,20 @@ app.post("/api/profiles/:id/verify", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || "Failed to verify PIN." });
+  }
+});
+
+app.post("/api/profiles/:id/reset-pin", async (req, res) => {
+  try {
+    const { pin } = req.body;
+    if (!/^\d{4}$/.test(pin)) {
+      return res.status(400).json({ error: "PIN must be exactly 4 digits." });
+    }
+    const profile = await updateProfilePin(Number(req.params.id), pin);
+    res.json(profile);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || "Failed to reset PIN." });
   }
 });
 

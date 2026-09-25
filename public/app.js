@@ -111,6 +111,31 @@ profilePinInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") submitPin();
 });
 
+const profilePinForgot = document.getElementById("profile-pin-forgot");
+const profileResetPinStep = document.getElementById("profile-reset-pin-step");
+const profileResetPinName = document.getElementById("profile-reset-pin-name");
+const profileResetPinNew = document.getElementById("profile-reset-pin-new");
+const profileResetPinNew2 = document.getElementById("profile-reset-pin-new2");
+const profileResetPinSubmit = document.getElementById("profile-reset-pin-submit");
+const profileResetPinBack = document.getElementById("profile-reset-pin-back");
+const profileResetPinError = document.getElementById("profile-reset-pin-error");
+
+profilePinForgot.addEventListener("click", () => {
+  profilePinStep.style.display = "none";
+  profileResetPinStep.style.display = "block";
+  profileResetPinName.textContent = pendingProfile.name;
+  profileResetPinNew.value = "";
+  profileResetPinNew2.value = "";
+  profileResetPinError.style.display = "none";
+  profileResetPinNew.focus();
+});
+
+profileResetPinBack.addEventListener("click", showPinStep);
+profileResetPinSubmit.addEventListener("click", submitResetPin);
+profileResetPinNew.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") submitResetPin();
+});
+
 async function submitPin() {
   const pin = profilePinInput.value.trim();
   if (!/^\d{4}$/.test(pin)) {
@@ -135,6 +160,52 @@ async function submitPin() {
     profilePinError.style.display = "block";
   } finally {
     setBusy(profilePinSubmit, false, "Enter");
+  }
+}
+
+async function submitResetPin() {
+  const pin1 = profileResetPinNew.value.trim();
+  const pin2 = profileResetPinNew2.value.trim();
+
+  if (!/^\d{4}$/.test(pin1)) {
+    profileResetPinError.textContent = "PIN must be exactly 4 digits.";
+    profileResetPinError.style.display = "block";
+    return;
+  }
+  if (pin1 !== pin2) {
+    profileResetPinError.textContent = "PINs don't match.";
+    profileResetPinError.style.display = "block";
+    return;
+  }
+
+  setBusy(profileResetPinSubmit, true, "Resetting...");
+  try {
+    const res = await fetch(`/api/profiles/${pendingProfile.id}/reset-pin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin: pin1 }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to reset PIN.");
+    profileResetPinError.textContent = "";
+    profileResetPinError.style.display = "none";
+    profileResetPinError.classList.remove("over");
+    profileResetPinError.classList.add("success");
+    profileResetPinError.textContent = "✓ PIN reset successfully. Enter your new PIN above.";
+    profileResetPinError.style.display = "block";
+    setTimeout(() => {
+      profileResetPinStep.style.display = "none";
+      profilePinStep.style.display = "block";
+      profilePinInput.value = "";
+      profilePinInput.focus();
+      profileResetPinError.classList.remove("success");
+      profileResetPinError.classList.add("over");
+    }, 1500);
+  } catch (err) {
+    profileResetPinError.textContent = err.message;
+    profileResetPinError.style.display = "block";
+  } finally {
+    setBusy(profileResetPinSubmit, false, "Set New PIN");
   }
 }
 

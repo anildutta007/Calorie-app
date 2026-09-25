@@ -706,6 +706,20 @@ async function updateFavoriteName(mealId, newName) {
   return result[0];
 }
 
+async function updateProfilePin(profileId, newPin) {
+  await init();
+  const salt = crypto.randomBytes(32).toString("hex");
+  const hash = hashPin(newPin, salt);
+  const result = await sql`
+    UPDATE profiles
+    SET pin_salt = ${salt}, pin_hash = ${hash}
+    WHERE id = ${profileId}
+    RETURNING id, name
+  `;
+  if (!result.length) throw new Error("Profile not found");
+  return result[0];
+}
+
 module.exports = {
   insertMeal,
   getMeal,
@@ -743,4 +757,5 @@ module.exports = {
   getFavoriteMeals,
   getAllFavoriteMeals,
   updateFavoriteName,
+  updateProfilePin,
 };

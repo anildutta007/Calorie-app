@@ -39,8 +39,19 @@
         <h2 id="profile-pin-name"></h2>
         <input id="profile-pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="4-digit PIN" />
         <button id="profile-pin-submit" class="primary-btn">Enter</button>
+        <button id="profile-pin-forgot" class="link-btn">Forgot PIN?</button>
         <button id="profile-pin-back" class="link-btn">&larr; back</button>
         <div id="profile-pin-error" class="flag over" style="display:none"></div>
+      </div>
+
+      <div id="profile-reset-pin-step" style="display:none">
+        <h2>Reset PIN for <span id="profile-reset-pin-name"></span></h2>
+        <p style="font-size:0.9rem;color:#666;margin-bottom:12px;">Enter a new 4-digit PIN</p>
+        <input id="profile-reset-pin-new" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="New PIN" />
+        <input id="profile-reset-pin-new2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="Confirm PIN" />
+        <button id="profile-reset-pin-submit" class="primary-btn">Set New PIN</button>
+        <button id="profile-reset-pin-back" class="link-btn">&larr; back</button>
+        <div id="profile-reset-pin-error" class="flag over" style="display:none"></div>
       </div>
 
       <div id="profile-new-step" style="display:none">
