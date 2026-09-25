@@ -381,9 +381,7 @@ async function loadFavoriteMeals() {
 
 // Show favorites dropdown on focus
 voiceText.addEventListener("focus", () => {
-  if (favoritesData.length > 0) {
-    showFavoritesSuggestions();
-  }
+  showFavoritesSuggestions();
 });
 
 // Hide favorites dropdown when clicking outside
