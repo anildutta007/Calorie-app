@@ -77,6 +77,8 @@ app.use("/api/meal-plan", requireProfile);
 app.use("/api/profile", requireProfile);
 app.use("/api/progress", requireProfile);
 app.use("/api/weight-goal", requireProfile);
+app.use("/api/all-favorites", requireProfile);
+app.use("/api/favorites", requireProfile);
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD (server local/UTC date)
