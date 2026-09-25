@@ -3718,13 +3718,18 @@ async function loadProgress() {
   const container = document.getElementById("tab-progress");
   container.innerHTML = `<div class="empty-state">Loading your progress...</div>`;
   try {
-    const [progressRes, weightRes] = await Promise.all([
+    const [progressRes, weightRes, targetsRes] = await Promise.all([
       fetch("/api/progress?days=7",            { headers: profileHeaders() }),
       fetch("/api/profile/weight?months=6",    { headers: profileHeaders() }),
+      fetch("/api/profile/targets",            { headers: profileHeaders() }),
     ]);
     const data       = await progressRes.json();
     if (!progressRes.ok) throw new Error(data.error || "Failed to load progress.");
     const weightData = weightRes.ok ? await weightRes.json() : { entries: [] };
+    const targetsData = targetsRes.ok ? await targetsRes.json() : { targets: null };
+    if (targetsData.targets) {
+      currentTargets = targetsData.targets;
+    }
     renderProgress(data.days || [], weightData.entries || []);
   } catch (err) {
     document.getElementById("tab-progress").innerHTML = `<div class="flag over">⚠️ ${escapeHtml(err.message)}</div>`;
