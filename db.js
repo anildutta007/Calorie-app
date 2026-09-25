@@ -680,6 +680,20 @@ async function getFavoriteMeals(profileId, timeZone, limit = 10) {
   `;
 }
 
+// Get all favorite meals regardless of time zone (for meal logging input)
+async function getAllFavoriteMeals(profileId, limit = 20) {
+  await init();
+  return await sql`
+    SELECT id, description, favorite_name, calories, protein_g, carbs_g, fat_g,
+           fiber_g, sugar_g, sodium_mg, saturated_fat_g
+    FROM meals
+    WHERE profile_id = ${profileId}
+      AND is_favorite = true
+    ORDER BY created_at DESC
+    LIMIT ${limit}
+  `;
+}
+
 // Update favorite meal name
 async function updateFavoriteName(mealId, newName) {
   await init();
@@ -727,5 +741,6 @@ module.exports = {
   updateMealExtendedMacros,
   toggleMealFavorite,
   getFavoriteMeals,
+  getAllFavoriteMeals,
   updateFavoriteName,
 };

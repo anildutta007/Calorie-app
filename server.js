@@ -38,6 +38,7 @@ const {
   updateMealExtendedMacros,
   toggleMealFavorite,
   getFavoriteMeals,
+  getAllFavoriteMeals,
   updateFavoriteName,
 } = require("./db");
 const { analyzeMealText, analyzeMealPhoto, estimateItemMacros, generateDailyQuote, generateProgressSummary } = require("./nutrition");
@@ -483,17 +484,7 @@ app.get("/api/favorites", async (req, res) => {
 // Get all favorite meals regardless of time zone (for meal logging input)
 app.get("/api/all-favorites", async (req, res) => {
   try {
-    const { neon } = require("@neondatabase/serverless");
-    const sql = neon(process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_URL_NON_POOLING);
-    const favorites = await sql`
-      SELECT id, description, favorite_name, calories, protein_g, carbs_g, fat_g,
-             fiber_g, sugar_g, sodium_mg, saturated_fat_g
-      FROM meals
-      WHERE profile_id = ${req.profileId}
-        AND is_favorite = true
-      ORDER BY created_at DESC
-      LIMIT 20
-    `;
+    const favorites = await getAllFavoriteMeals(req.profileId, 20);
     res.json({ favorites });
   } catch (err) {
     console.error(err);
