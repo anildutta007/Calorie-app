@@ -444,6 +444,10 @@ async function loadFavoriteMeals() {
     if (res.ok) {
       const data = await res.json();
       favoritesData = data.favorites || [];
+      console.log("✓ Favorites loaded:", favoritesData.length, "meals");
+    } else {
+      const errData = await res.json();
+      console.error("Failed to load favorites. Status:", res.status, "Error:", errData.error);
     }
   } catch (err) {
     console.error("Failed to load favorite meals:", err);
@@ -463,9 +467,11 @@ document.addEventListener("click", (e) => {
 });
 
 function showFavoritesSuggestions() {
+  console.log("showFavoritesSuggestions called. Favorites data:", favoritesData.length);
   if (favoritesData.length === 0) {
     favoritesSuggestions.innerHTML = '<div class="recurring-item" style="padding:8px;text-align:center;color:var(--muted)">No favorite meals yet. Star a meal to save it.</div>';
     favoritesSuggestions.style.display = "block";
+    console.log("No favorites - showing empty state");
     return;
   }
 
