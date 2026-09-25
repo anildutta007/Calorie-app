@@ -467,11 +467,11 @@ document.addEventListener("click", (e) => {
 });
 
 function showFavoritesSuggestions() {
-  console.log("showFavoritesSuggestions called. Favorites data:", favoritesData.length);
+  console.log("showFavoritesSuggestions called. Favorites data:", favoritesData.length, "items:", favoritesData);
   if (favoritesData.length === 0) {
+    console.warn("⚠️ No favorites loaded! Checking if API was called...");
     favoritesSuggestions.innerHTML = '<div class="recurring-item" style="padding:8px;text-align:center;color:var(--muted)">No favorite meals yet. Star a meal to save it.</div>';
     favoritesSuggestions.style.display = "block";
-    console.log("No favorites - showing empty state");
     return;
   }
 
@@ -987,13 +987,18 @@ function daySummaryLine(total) {
 // --- Today tab ---
 async function loadToday() {
   try {
-    const [mealsRes, exerciseRes] = await Promise.all([
+    const [mealsRes, exerciseRes, targetsRes] = await Promise.all([
       fetch("/api/meals",             { headers: profileHeaders() }),
       fetch("/api/profile/exercise",  { headers: profileHeaders() }),
+      fetch("/api/profile/targets",   { headers: profileHeaders() }),
     ]);
     if (mealsRes.status >= 500) throw new Error(`Server error ${mealsRes.status}`);
     const data = await mealsRes.json();
     todayExercise = exerciseRes.ok ? (await exerciseRes.json()).exercise : null;
+    const targetsData = targetsRes.ok ? await targetsRes.json() : { targets: null };
+    if (targetsData.targets) {
+      currentTargets = targetsData.targets;
+    }
     hideDbBanner();
     todayTotal = data.total; // keep a reference for the "complete my day" feature
     updateSuggestCard();
